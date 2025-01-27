@@ -41,8 +41,6 @@ void INFO_Do()
   // Transmit Counter
   sprintf (msgbuf+strlen(msgbuf), "%d,", SendMsgCount++);
 
-  sprintf (msgbuf+strlen(msgbuf), "{");
-
     sprintf (msgbuf+strlen(msgbuf), "{\"at\":\"%s\",\"id\":%d,\"devid\":\"%s\",",
       timestamp, cf_lora_unitid, DeviceID);
 
