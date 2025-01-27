@@ -25,7 +25,7 @@ void OBS_Do (bool log_obs) {
   float mcp2_temp = 0.0;
   float batt = 0.0;
   float rain = 0.0;
-  float ds_median;
+  float ds_median, ds_median_raw;
   unsigned long rgds;    // rain gauge delta seconds, seconds since last rain gauge observation logged
   bool SoilProbesExist = false;
 
@@ -65,9 +65,9 @@ void OBS_Do (bool log_obs) {
   }
 
   if (cf_ds_enable) {
-    ds_median = DS_Median();
+    ds_median = ds_median_raw = DS_Median();
     if (cf_ds_baseline > 0) {
-      ds_median = cf_ds_baseline - ds_median;
+      ds_median = cf_ds_baseline - ds_median_raw;
     }
   }
 
@@ -198,8 +198,9 @@ void OBS_Do (bool log_obs) {
   }
   
   if (cf_ds_enable) {
-    sprintf (obsbuf+strlen(obsbuf), "\"sg\":%d.%02d,", 
-      (int)ds_median, (int)(ds_median*100)%100);
+    sprintf (obsbuf+strlen(obsbuf), "\"sg\":%d.%02d,\"sgr\":%d.%02d,", 
+      (int)ds_median, (int)(ds_median*100)%100,
+      (int)ds_median_raw, (int)(ds_median_raw*100)%100);
   }
     
   if (SoilProbesExist) {

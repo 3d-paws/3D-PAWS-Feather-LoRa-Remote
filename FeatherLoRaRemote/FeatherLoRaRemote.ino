@@ -252,13 +252,12 @@ void obs_interval_initialize() {
 
 /* 
  *=======================================================================================================================
- * seconds_to_next_obs() - do observations on 0, 15, 30, or 45 minute window
+ * seconds_to_next_obs() - This will return seconds to next observation
  *=======================================================================================================================
  */
 int seconds_to_next_obs() {
   now = rtc.now(); //get the current date-time
-  return ((cf_obs_period*60) - (now.unixtime() % (cf_obs_period*60))); // The mod operation gives us seconds passed
-                                                                       // with in this observation_period window
+  return ((cf_obs_period*60) - (now.unixtime() % (cf_obs_period*60))); // The mod operation gives us seconds passed                                                                    // with in this observation_period window
 }
 
 void sleepinterrupt() {
