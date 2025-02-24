@@ -48,6 +48,9 @@ ds_type=0
 # Distance sensor baseline. If positive, distance = baseline - ds_median
 ds_baseline=0
 
+# Observation Period in minutes
+obs_period=15
+
 */
 
 /*

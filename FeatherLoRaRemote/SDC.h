@@ -295,12 +295,15 @@ void SD_ReadConfigFile() {
   sprintf(msgbuf, "CF:lora_gwid=[%d]", cf_lora_gwid); Output (msgbuf);
   
   cf_lora_txpower = SD_findInt(F("lora_txpower"));
+  if (cf_lora_txpower <= 0) { cf_lora_txpower = 13; } // Safty Check
   sprintf(msgbuf, "CF:lora_txpower=[%d]", cf_lora_txpower); Output (msgbuf);
 
   cf_lora_freq   = SD_findInt(F("lora_freq"));
+  if (cf_lora_freq <= 0) { cf_lora_freq = 915; } // Safty Check
   sprintf(msgbuf, "CF:lora_freq=[%d]", cf_lora_freq); Output (msgbuf);
 
   cf_obs_period   = SD_findInt(F("obs_period"));
+  if (cf_obs_period <= 0) { cf_obs_period = 15; } // Safty Check
   sprintf(msgbuf, "CF:obs_period=[%d]", cf_obs_period); Output (msgbuf);
 
   cf_rg_disable   = SD_findInt(F("rg_disable"));

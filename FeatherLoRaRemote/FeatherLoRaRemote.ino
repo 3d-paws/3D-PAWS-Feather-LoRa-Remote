@@ -1,5 +1,5 @@
 #define COPYRIGHT "Copyright [2024] [University Corporation for Atmospheric Research]"
-#define VERSION_INFO "FLoRaRemote-250125"
+#define VERSION_INFO "FLoRaRemote-250224"
 
 /*
  *======================================================================================================================
@@ -15,6 +15,7 @@
  *           2025-01-23 RJB Added ds_basline to config file, If positive, distance = baseline - ds_median
  *                          Added support for observation intervals 5,6,10,15,20,30
  *                          Added support for Tinovi moisture sensors (Leaf, Soil, Multi Level Soil)                          
+ *           2025-02-24 RJB Changes to Config File handing. Safty checks added.
  *                          
  * Time Format: 2022:09:19:19:10:00  YYYY:MM:DD:HR:MN:SS
  * 
@@ -37,7 +38,7 @@
  * SEE https://learn.adafruit.com/adafruit-adalogger-featherwing/pinouts
  * SEE https://www.microchip.com/wwwproducts/en/MCP73831 - Battery Charger
  * 
- * Antenna Options
+ * Antenna Options - Wire 3in long for 915Mhz
  * https://learn.adafruit.com/adafruit-feather-m0-radio-with-lora-radio-module/antenna-options
  * https://www.changpuak.ch/electronics/bi_quad_antenna_designer.php
  * 
