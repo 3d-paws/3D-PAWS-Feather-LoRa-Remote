@@ -208,7 +208,7 @@ void OBS_Do (bool log_obs) {
       if (ds_found[probe]) {
         sprintf (obsbuf+strlen(obsbuf), "\"sm%d\":%d,\"st%d\":%d.%02d,",  
           probe+1, sm_reading[probe],
-          probe+1, (int)ds_reading[probe], (int)(ds_reading[probe]*100)%100);   
+          probe+1, (int)ds_reading[probe], abs((int)(ds_reading[probe]*100)%100));   
       }
     }
   }
@@ -216,34 +216,34 @@ void OBS_Do (bool log_obs) {
   if (BMX_1_exists) {
     sprintf (obsbuf+strlen(obsbuf), "\"bp1\":%u.%04d,\"bt1\":%d.%02d,\"bh1\":%d.%02d,",
       (int)bmx1_pressure, (int)(bmx1_pressure*100)%100,
-      (int)bmx1_temp, (int)(bmx1_temp*100)%100,
+      (int)bmx1_temp, abs((int)(bmx1_temp*100)%100),
       (int)bmx1_humid, (int)(bmx1_humid*100)%100);
   }
   if (BMX_2_exists) {
     sprintf (obsbuf+strlen(obsbuf), "\"bp2\":%u.%04d,\"bt2\":%d.%02d,\"bh2\":%d.%02d,",
       (int)bmx2_pressure, (int)(bmx2_pressure*100)%100,
-      (int)bmx2_temp, (int)(bmx2_temp*100)%100,
+      (int)bmx2_temp, abs((int)(bmx2_temp*100)%100),
       (int)bmx2_humid, (int)(bmx2_humid*100)%100);
   }
   
   if (SHT_1_exists) { 
      sprintf (obsbuf+strlen(obsbuf), "\"st1\":%d.%02d,\"sh1\":%d.%02d,",
-      (int)sht1_temp, (int)(sht1_temp*100)%100,
+      (int)sht1_temp, abs((int)(sht1_temp*100)%100),
       (int)sht1_humid, (int)(sht1_humid*100)%100);   
   }
   if (SHT_2_exists) { 
     sprintf (obsbuf+strlen(obsbuf), "\"st2\":%d.%02d,\"sh2\":%d.%02d,",
-      (int)sht2_temp, (int)(sht2_temp*100)%100,
+      (int)sht2_temp, abs((int)(sht2_temp*100)%100),
       (int)sht2_humid, (int)(sht2_humid*100)%100);   
   }
   
   if (MCP_1_exists) {
     sprintf (obsbuf+strlen(obsbuf), "\"mt1\":%d.%02d,",
-      (int)mcp1_temp, (int)(mcp1_temp*100)%100);    
+      (int)mcp1_temp, abs((int)(mcp1_temp*100)%100));    
   }
   if (MCP_2_exists) {
     sprintf (obsbuf+strlen(obsbuf), "\"mt2\":%d.%02d,",
-      (int)mcp1_temp, (int)(mcp2_temp*100)%100);        
+      (int)mcp1_temp, abs((int)(mcp2_temp*100)%100));        
   }
 
   if (TLW_exists) {
@@ -254,8 +254,8 @@ void OBS_Do (bool log_obs) {
     t = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
 
     sprintf (obsbuf+strlen(obsbuf), "\"tlww\":%d.%02d,\"tlwt\":%d.%02d,",
-      (int)w, (int)(w*100)%100, 
-      (int)t, (int)(t*100)%100);
+      (int)w, abs((int)(w*100)%100), 
+      (int)t, abs((int)(t*100)%100));
   }
 
   if (TSM_exists) {
@@ -271,7 +271,7 @@ void OBS_Do (bool log_obs) {
       (int)e25, (int)(e25*100)%100, 
       (int)ec, (int)(ec*100)%100,
       (int)vwc, (int)(vwc*100)%100,
-      (int)t, (int)(t*100)%100);
+      (int)t, abs((int)(t*100)%100));
   }
 
   if (TMSM_exists) {
@@ -291,8 +291,8 @@ void OBS_Do (bool log_obs) {
       (int)multi.vwc[1], (int)(multi.vwc[1]*100)%100,
       (int)multi.vwc[2], (int)(multi.vwc[2]*100)%100,
       (int)multi.vwc[3], (int)(multi.vwc[3]*100)%100,
-      (int)t1, (int)(t1*100)%100,
-      (int)t2, (int)(t2*100)%100);
+      (int)t1, abs((int)(t1*100)%100),
+      (int)t2, abs((int)(t2*100)%100));
   } 
    
   sprintf (obsbuf+strlen(obsbuf), "\"bv\":%d.%02d,\"hth\":%d}", 

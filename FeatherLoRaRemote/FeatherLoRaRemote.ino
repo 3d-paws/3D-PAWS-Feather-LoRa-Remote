@@ -1,5 +1,5 @@
 #define COPYRIGHT "Copyright [2024] [University Corporation for Atmospheric Research]"
-#define VERSION_INFO "FLoRaRemote-250224"
+#define VERSION_INFO "FLoRaRemote-250424"
 
 /*
  *======================================================================================================================
@@ -16,6 +16,8 @@
  *                          Added support for observation intervals 5,6,10,15,20,30
  *                          Added support for Tinovi moisture sensors (Leaf, Soil, Multi Level Soil)                          
  *           2025-02-24 RJB Changes to Config File handing. Safty checks added.
+ *           2025-03-09 RJB Replaced a direct Serial output in SDC.h SD_findKey() with Output() 
+ *           2025-04-24 RJB Corrected bugs in negative temperature reporting
  *                          
  * Time Format: 2022:09:19:19:10:00  YYYY:MM:DD:HR:MN:SS
  * 
