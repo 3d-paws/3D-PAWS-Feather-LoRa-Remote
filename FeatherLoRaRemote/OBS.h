@@ -173,20 +173,9 @@ void OBS_Do (bool log_obs) {
   }
 
   // Build JSON log entry by hand  
-  // {"at":"2021-03-05T11:43:59","rg":49,"rgs":333,"sm1":234,"st1":22.33,"bp1":3,"bt1":97.875,"bh1":40.20,"bv":3.5,"hth":9}
+  // {"at":"2025-08-12T17:05:18","id":72,"devid":"330eff6367815b7d93bfbcec","rg":0.00,"sg":700.00,"sgr":700.00,"sm1":1,"st1":22.50,"bp1":849.0065,"bt1":23.29,"bh1":0.00,"bv":3.76,"hth":0}
 
-  strcpy (obsbuf, "NCS");
-  // Message type,
-  sprintf (obsbuf+strlen(obsbuf), "LR,"); // IF Particle Message Type (INFO)
-  
-  // Station ID
-  sprintf (obsbuf+strlen(obsbuf), "%d,", cf_lora_unitid);    // Must be unique if multiple are transmitting
-  
-  // Transmit Counter
-  sprintf (obsbuf+strlen(obsbuf), "%d,", SendMsgCount++);
-
-  
-  sprintf (obsbuf, "{\"at\":\"%s\",\"id\":%d,\"devid\":\"%s\",", 
+  sprintf (obsbuf, "{\"at\":\"%s\",\"id\":%d,\"devid\":\"%s\",\"type\":\"OBS\",", 
     timestamp, cf_lora_unitid, DeviceID);
 
   if (!cf_rg_disable) {

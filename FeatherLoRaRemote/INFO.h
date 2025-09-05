@@ -41,7 +41,7 @@ void INFO_Do()
   // Transmit Counter
   sprintf (msgbuf+strlen(msgbuf), "%d,", SendMsgCount++);
 
-    sprintf (msgbuf+strlen(msgbuf), "{\"at\":\"%s\",\"id\":%d,\"devid\":\"%s\",",
+    sprintf (msgbuf+strlen(msgbuf), "{\"at\":\"%s\",\"id\":%d,\"devid\":\"%s\",\"type\":\"IF\",",
       timestamp, cf_lora_unitid, DeviceID);
 
     sprintf (msgbuf+strlen(msgbuf), "\"ver\":\"%s\",\"bv\":%d.%02d,\"hth\":%d,",

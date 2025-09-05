@@ -111,8 +111,8 @@ int SD_findKey(const __FlashStringHelper * key, char * value) {
   File configFile = SD.open(CF_NAME);
 
   if (!configFile) {
-    Serial.print(F("SD Card: error on opening file "));
-    Serial.println(CF_NAME);
+    sprintf (Buffer32Bytes, "SD File [%s] NF", CF_NAME);
+    Output (Buffer32Bytes);
     return(0);
   }
 

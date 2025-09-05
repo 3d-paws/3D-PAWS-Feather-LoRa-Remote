@@ -1,5 +1,5 @@
-#define COPYRIGHT "Copyright [2024] [University Corporation for Atmospheric Research]"
-#define VERSION_INFO "FLoRaRemote-250424"
+#define COPYRIGHT "Copyright [2025] [University Corporation for Atmospheric Research]"
+#define VERSION_INFO "FLoRaRemote-250812"
 
 /*
  *======================================================================================================================
@@ -18,6 +18,8 @@
  *           2025-02-24 RJB Changes to Config File handing. Safty checks added.
  *           2025-03-09 RJB Replaced a direct Serial output in SDC.h SD_findKey() with Output() 
  *           2025-04-24 RJB Corrected bugs in negative temperature reporting
+ *           2025-08-12 RJB Bug - Double incrementing SendMsgCount. Fixed in OBS.h
+ *           2025-08-17 RJB added type to sending data \"type\":\"IF\"  \"type\":\"OBS\"
  *                          
  * Time Format: 2022:09:19:19:10:00  YYYY:MM:DD:HR:MN:SS
  * 
