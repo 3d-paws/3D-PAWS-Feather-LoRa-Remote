@@ -1,5 +1,5 @@
 #define COPYRIGHT "Copyright [2025] [University Corporation for Atmospheric Research]"
-#define VERSION_INFO "FLoRaRemote-250812"
+#define VERSION_INFO "FLoRaRemote-250911"
 
 /*
  *======================================================================================================================
@@ -19,7 +19,10 @@
  *           2025-03-09 RJB Replaced a direct Serial output in SDC.h SD_findKey() with Output() 
  *           2025-04-24 RJB Corrected bugs in negative temperature reporting
  *           2025-08-12 RJB Bug - Double incrementing SendMsgCount. Fixed in OBS.h
- *           2025-08-17 RJB added type to sending data \"type\":\"IF\"  \"type\":\"OBS\"
+ *           2025-08-17 RJB added to INFO and OBS messages \"type\":\"IF\"  \"type\":\"OBS\"
+ *           2025-09-11 RJB In OBS fixed casting bug on rain collection. Added (float)
+ *                          (rain > (((float) rgds / 60) * QC_MAX_RG))
+ *                          Fixed sending -999.-90 QC error values FIX (rain < 0 ? -rain : rain) added
  *                          
  * Time Format: 2022:09:19:19:10:00  YYYY:MM:DD:HR:MN:SS
  * 
@@ -452,6 +455,7 @@ void loop()
       delay (GoToSleepTime);
     }
     else {  
+
       Output("Going to Sleep");
 
       if (LORA_exists) {
@@ -470,4 +474,5 @@ void loop()
       Output("Wakeup");
     }
   }
+
 }
