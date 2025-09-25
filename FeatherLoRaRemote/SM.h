@@ -34,13 +34,7 @@ void StationMonitor() {
   // Line 1 of OLED
   // =================================================================
   if (cf_ds_enable) {
-    int sg  = (int) analogRead(DS_PIN);
-    if (cf_ds_type) {  // 0 = 5m, 1 = 10m
-      sg *= 10;
-    }
-    else {
-      sg *= 5;
-    }
+    int sg  = (int) analogRead(DISTANCE_GAUGE_PIN) * cf_ds_enable;  // cf_ds_enable = 0,5,10
     sprintf (msgbuf, "SG:%d %s", sg, (cf_ds_enable) ? "10m" : "5m"); 
   }
   else {
@@ -53,11 +47,18 @@ void StationMonitor() {
   // =================================================================
   // Line 2 of OLED
   // =================================================================
-  if (!cf_rg_disable) {
-    sprintf (msgbuf, "RG:%d", (int) rainguage_interrupt_count);
+  if (cf_rg1_enable) {
+    sprintf (msgbuf, "RG1:%d", (int) raingauge1_interrupt_count);
   }
   else {
-    sprintf (msgbuf, "RG:NF");
+    sprintf (msgbuf, "RG1:NF");
+  }
+  
+  if (cf_rg2_enable) {
+    sprintf (msgbuf+strlen(msgbuf), " RG2:%d", (int) raingauge2_interrupt_count);
+  }
+  else {
+    sprintf (msgbuf+strlen(msgbuf), " RG2:NF");
   }
   len = (strlen (msgbuf) > 21) ? 21 : strlen (msgbuf);
   for (c=0; c<=len; c++) oled_lines [2][c] = *(msgbuf+c);

@@ -18,6 +18,12 @@
 #define QC_MAX_RH      100.0     // %
 #define QC_ERR_RH      -999.9    // Relative Humidity Error
 
+// Heat Index Temperature
+// SEE https://www.weather.gov/ffc/hichart
+#define QC_MIN_HI       0.0      // deg C - NWS = Min 27°C (80.0°F) - Want to see a value, so set 0
+#define QC_MAX_HI       60.0     // deg C - NWS = Max 54°C (130°F)
+#define QC_ERR_HI       -999.9   // deg C Error
+
 // Sensor SI1145
 #define QC_MIN_IR      0.0       // unitless
 #define QC_MAX_IR      16000.0   // unitless - based on the maximum readings from 43 stations located in tropics

@@ -33,22 +33,26 @@ lora_txpower=23
 # Valid entries are 433, 866, 915
 lora_freq=915
 
-# Observation Period (5,6,10,15,20,30)  
-obs_period=15
+# Wind is enabled on A2 if the software detects AS5600 at boot.
 
-# Enable / Disable rain gauge (0/1)
-rg_disable=0
+# Rain Gauge rg1 pin A3
+# Options 0,1
+rg1_enable=0
+
+# Rain Gauge rg2 pin A4
+# Options 0,1
+rg2_enable=0
 
 # Enable / Disable distance sensor (0/1)
-ds_enable=1
-
-# Distance sensor type 0 = 5m (default), 1 = 10m
-ds_type=0
+# Distance Sensor for Snow, Surge, Stream on pin A5
+# Options 0 = No sensor, 5 = 5M sendor, 10 = 10m sensor
+ds_enable=5
 
 # Distance sensor baseline. If positive, distance = baseline - ds_median
 ds_baseline=0
 
-# Observation Period in minutes
+# Valid Observation Period in minutes (5,6,10,15,20,30)
+# 15 minute observation period is the default
 obs_period=15
 
 */
@@ -65,7 +69,7 @@ int cf_lora_gwid=1;
 int cf_lora_txpower=13;
 int cf_lora_freq=915;
 int cf_obs_period=15;
-int cf_rg_disable=0;
+int cf_rg1_enable=0;
+int cf_rg2_enable=0;
 int cf_ds_enable=0;
-int cf_ds_type=0;
 int cf_ds_baseline=0;

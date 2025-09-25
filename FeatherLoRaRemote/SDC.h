@@ -3,14 +3,19 @@
  * SD.h - SD Card
  * ======================================================================================================================
  */
-
- // Use Teensy SDIO
-#define SD_CONFIG  SdioConfig(FIFO_SDIO)
+#define SD_ChipSelect 10    // GPIO 10 is Pin 10 on Feather and D5 on Particle Boron Board
 
 #define CF_NAME           "CONFIG.TXT"
 #define KEY_MAX_LENGTH    30                // Config File Key Length
 #define VALUE_MAX_LENGTH  30                // Config File Value Length
 #define LINE_MAX_LENGTH   VALUE_MAX_LENGTH+KEY_MAX_LENGTH+3   // =, CR, LF 
+
+// SD;                      // File system object defined by the SD.h include file.
+File SD_fp;
+char SD_obsdir[] = "/OBS";  // Store our obs in this directory. At Power on, it is created if does not exist
+bool SD_exists = false;     // Set to true if SD card found at boot
+
+char SD_crt_file[] = "CRT.TXT";             // if file exists clear rain totals and delete file
 
 /* 
  *=======================================================================================================================
@@ -82,6 +87,33 @@ void SD_LogObservation(char *observations) {
     Output ("OBS Open Log Err");
     // At thins point we could set SD_exists to false and/or set a status bit to report it
     // SD_initialize();  // Reports SD NOT Found. Library bug with SD
+  }
+}
+
+/* 
+ *=======================================================================================================================
+ * SD_ClearRainTotals() -- If CRT.TXT exists on SD card clear rain totals - Checked at Boot
+ *=======================================================================================================================
+ */
+void SD_ClearRainTotals() {
+  if (RTC_valid && SD_exists) {
+    if (SD.exists(SD_crt_file)) {
+      if (SD.remove (SD_crt_file)) {
+        Output ("CRT:OK-CLR");
+        now = rtc.now();
+        EEPROM_ClearRainTotals(now.unixtime());
+        EEPROM_Dump();
+      }
+      else {
+        Output ("CRT:ERR-RM");
+      }
+    }
+    else {
+      Output ("CRT:OK-NF");
+    }
+  }
+  else {
+    Output ("CRT:ERR-CLK");
   }
 }
 
@@ -283,38 +315,40 @@ long SD_findLong(const __FlashStringHelper * key) {
  */
 void SD_ReadConfigFile() {
   cf_aes_pkey     = SD_findCharStr(F("aes_pkey"));
-  sprintf(msgbuf, "CF:aes_pkey=[%s]", cf_aes_pkey); Output (msgbuf);
+  sprintf(msgbuf, "%s=[%s]",  F("CF:aes_pkey"), cf_aes_pkey);         Output (msgbuf);
 
   cf_aes_myiv     = SD_findLong(F("aes_myiv"));
-  sprintf(msgbuf, "CF:aes_myiv=[%lu]", cf_aes_myiv);   Output (msgbuf);
+  sprintf(msgbuf, "%s=[%lu]", F("CF:aes_myiv"), cf_aes_myiv);         Output (msgbuf);
 
   cf_lora_unitid  = SD_findInt(F("lora_unitid"));
-  sprintf(msgbuf, "CF:lora_unitid=[%d]", cf_lora_unitid); Output (msgbuf);
+  sprintf(msgbuf, "%s=[%d]",  F("CF:lora_unitid"), cf_lora_unitid);   Output (msgbuf);
 
   cf_lora_gwid    = SD_findInt(F("lora_gwid"));
-  sprintf(msgbuf, "CF:lora_gwid=[%d]", cf_lora_gwid); Output (msgbuf);
+  sprintf(msgbuf, "%s=[%d]",  F("CF:lora_gwid"), cf_lora_gwid);       Output (msgbuf);
   
   cf_lora_txpower = SD_findInt(F("lora_txpower"));
   if (cf_lora_txpower <= 0) { cf_lora_txpower = 13; } // Safty Check
-  sprintf(msgbuf, "CF:lora_txpower=[%d]", cf_lora_txpower); Output (msgbuf);
+  sprintf(msgbuf, "%s=[%d]",  F("CF:lora_txpower"), cf_lora_txpower); Output (msgbuf);
 
   cf_lora_freq   = SD_findInt(F("lora_freq"));
   if (cf_lora_freq <= 0) { cf_lora_freq = 915; } // Safty Check
-  sprintf(msgbuf, "CF:lora_freq=[%d]", cf_lora_freq); Output (msgbuf);
+  sprintf(msgbuf, "%s=[%d]",  F("CF:lora_freq"), cf_lora_freq);       Output (msgbuf);
 
   cf_obs_period   = SD_findInt(F("obs_period"));
   if (cf_obs_period <= 0) { cf_obs_period = 15; } // Safty Check
-  sprintf(msgbuf, "CF:obs_period=[%d]", cf_obs_period); Output (msgbuf);
+  sprintf(msgbuf, "%s=[%d]",  F("CF:obs_period"), cf_obs_period);     Output (msgbuf);
 
-  cf_rg_disable   = SD_findInt(F("rg_disable"));
-  sprintf(msgbuf, "CF:rg_disable=[%d]", cf_rg_disable); Output (msgbuf);
+  // Rain
+  cf_rg1_enable   = SD_findInt(F("rg1_enable"));
+  sprintf(msgbuf, "%s=[%d]",  F("CF:rg1_enable"), cf_rg1_enable);     Output (msgbuf);
 
-  cf_ds_enable   = SD_findInt(F("ds_enable"));
-  sprintf(msgbuf, "CF:ds_enable=[%d]", cf_ds_enable); Output (msgbuf); 
-  
-  cf_ds_type   = SD_findInt(F("ds_type"));
-  sprintf(msgbuf, "CF:ds_type=[%d]", cf_ds_type); Output (msgbuf); 
+  cf_rg2_enable   = SD_findInt(F("rg2_enable"));
+  sprintf(msgbuf, "%s=[%d]",  F("CF:rg2_enable"), cf_rg2_enable);     Output (msgbuf);
+
+  // Distance
+  cf_ds_enable    = SD_findInt(F("ds_enable"));
+  sprintf(msgbuf, "%s=[%d]",  F("CF:ds_enable"), cf_ds_enable);       Output (msgbuf);
 
   cf_ds_baseline = SD_findInt(F("ds_baseline"));
-  sprintf(msgbuf, "CF:ds_baseline=[%d]", cf_ds_baseline); Output (msgbuf);
+  sprintf(msgbuf, "%s=[%d]",  F("CF:ds_baseline"), cf_ds_baseline);   Output (msgbuf);
 }

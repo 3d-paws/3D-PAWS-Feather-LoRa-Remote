@@ -88,6 +88,48 @@ void OLED_ClearDisplayBuffer() {
     oled_lines [r][c] = (char) NULL;
   }
 }
+
+/*
+ * ======================================================================================================================
+ * OLED_spin() 
+ * ======================================================================================================================
+ */
+void OLED_spin() {
+  static int spin=0;
+    
+  if (DisplayEnabled) {
+    if (OLED32) {
+      display32.setTextColor(WHITE, BLACK); // Draw 'inverse' text
+      display32.setCursor(120,24);
+      display32.print(" ");
+      display32.setCursor(120,24); 
+    }
+    else {
+      display64.setTextColor(WHITE, BLACK); // Draw 'inverse' text
+      display64.setCursor(120,24);
+      display64.print(" ");
+      display64.setCursor(120,24);
+      display64.setCursor(120,56);
+      display64.print(" ");
+      display64.setCursor(120,56);       
+    } 
+    switch (spin++) {
+      case 0 : msgp = (char *) "|"; break;
+      case 1 : msgp = (char *) "/"; break;
+      case 2 : msgp = (char *) "-"; break;
+      case 3 : msgp = (char *) "\\"; break;
+    }
+    if (OLED32) {
+      display32.print(msgp);
+      display32.display();
+    }
+    else {
+      display64.print(msgp);
+      display64.display();
+    }
+    spin %= 4;
+  }
+}
   
 /*
  * ======================================================================================================================
@@ -289,7 +331,7 @@ void Serial_Initialize() {
     if (!Serial) {
       OLED_write("Wait4 Serial Console");
     }
-    int countdown=60; // Wait N seconds for serial connection, then move on.
+    int countdown=30; // Wait N seconds for serial connection, then move on.
     while (!Serial && countdown) {
       Blink(1, 1000);
       countdown--;

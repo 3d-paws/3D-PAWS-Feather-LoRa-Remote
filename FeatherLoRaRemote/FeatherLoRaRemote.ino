@@ -1,10 +1,10 @@
 #define COPYRIGHT "Copyright [2025] [University Corporation for Atmospheric Research]"
-#define VERSION_INFO "FLoRaRemote-250911"
+#define VERSION_INFO "FLoRaRemote-250925"
 
 /*
  *======================================================================================================================
  * FeatherLoRaRemote - 3D-PAWS-Feather-LoRaRemote
- *   Board Type : Adafruit Feather M0
+ *   Board Type : Adafruit Feather M0  #if defined(ADAFRUIT_FEATHER_M0)
  *   Description: Uses LoRa to report to Particle Full Stations for relay of observations 
  *   Author: Robert Bubon
  *   Date:   2025-01-15 RJB Renamed RS_LoRa_MO code base to LoRaRemoteM0
@@ -23,6 +23,19 @@
  *           2025-09-11 RJB In OBS fixed casting bug on rain collection. Added (float)
  *                          (rain > (((float) rgds / 60) * QC_MAX_RG))
  *                          Fixed sending -999.-90 QC error values FIX (rain < 0 ? -rain : rain) added
+ *           2025-09-16 RJB Added MUX support for Multiple Tinovi Capacitive Soil Moisture & Temperature sensors                         
+ *                          Only wait for serial consile connection for 30 not 60 seconds. When jumper set
+ *                          Only stay in station monitor for 5 minues not 30.
+ *                          Adding Wind. If we detect the AS5600 Wind direction we will then wake up
+ *                          take one minute of samples for wind, transmit and go back to sleep.
+ *                          Added air quality, average of 10 1s samples. Must be on mux channel 7 with no other sensors.
+ *           2025-09-20 RJB Added SDU support - Modified 
+ *                          ~/Library/Arduino15/packages/adafruit/hardware/samd/1.7.16/libraries/SDU/src/SDU.cpp
+ *                            #elif defined(ADAFRUIT_FEATHER_M0)
+ *                            #include "boot/adafeatherM0.h"
+ *                            Added adafeatherM0.h
+ *           2025-09-23 RJB Fixed checksum error on LoRa INFO messages
+ *                          Added the chunking of the observers into multiple lora packets
  *                          
  * Time Format: 2022:09:19:19:10:00  YYYY:MM:DD:HR:MN:SS
  * 
@@ -78,16 +91,16 @@
  * GND
  * A0            A0       Soil Moisture Sensor 1         Grove A0
  * A1            A1       Dallas Sensor 1wire 1          Grove A0
- * A2            A2       Soil Moisture Sensor 2         Grove A2
- * A3            A3       Dallas Sensor 1wire 2          Grove A2
- * A4            A4       Distance Gauge                 Grove A4
- * A5            A5       Not in Use                     Grove A4
- * SCK           SCK SPI0 Clock - SD/LoRa
+ * A2            A2       Interrupt For Anemometer       Grove A2
+ * A3            A3       Interrupt For Rain Gauge 1     Grove A2
+ * A4            A4       Interrupt For Rain Gauge 2     Grove A4
+ * A5            A5       Distance Sensor                Grove A4
+ * SCK           SCK      SPI0 Clock - SD/LoRa           Not on Grove
  * MOS           MOSI     Used by SD Card/LoRa           Not on Grove
  * MIS           MISO     Used by SDCard/LoRa            Not on Grove
  * RX0           D0                                      Grove UART
  * TX1           D1                                      Grove UART 
- * io1           DIO1                                    Not on Grove (Particle Pin D9)
+ * io1           DIO1     to D6 if LoRa WAN              Not on Grove (Particle Pin D9)
    
  * BAT           VBAT Power
  * En            Control - Connect to ground to disable the 3.3v regulator
@@ -97,8 +110,8 @@
  * 11            D11      Enable Sensors 2n2222/2N3904   Not on Grove
  * 10            D10      Used by SD Card as CS          Grove D4  (Particle Pin D5)
  * 9             D9/A7    Voltage Battery Pin            Grove D4  (Particle Pin D4)
- * 6             D6       Not in Use                     Grove D2  (Particle Pin D3)
- * 5             D5       Rain Gauge Interrupt           Grove D2  (Particle Pin D2)
+ * 6             D6       to DIO1 if LoRa WAN            Grove D2  (Particle Pin D3)
+ * 5             D5       Air Quality SET Pin            Grove D2  (Particle Pin D2)
  * SCL           D3       i2c Clock                      Grove I2C_1
  * SDA           D2       i2c Data                       Grove I2C_1
  * 
@@ -120,6 +133,30 @@
  * ======================================================================================================================
  */
 
+/*
+ * ======================================================================================================================
+ * Adding SDBoot Support for UPDATE.BIN on SD card
+ * 
+ * No Change Needed ~/Library/Arduino15/packages/adafruit/hardware/samd/1.7.16/variants/feather_m0/linker_scripts/gcc
+ * Replace Files in ~/Library/Arduino15/packages/adafruit/hardware/samd/1.7.16/libraries/SDU/extras/SDUBoot with
+ *                 ~/Documents/Arduino/3D-PAWS/3D-PAWS-Feather-LoRa-Remote/SDUBoot/
+ * Change directory to ~/Library/Arduino15/packages/adafruit/hardware/samd/1.7.16/libraries/SDU/extras/SDUBoot and run ./build.sh
+ * Copy ~/Library/Arduino15/packages/adafruit/hardware/samd/1.7.16/libraries/SDU/src/boot/featherm0.h to
+ *     ~/Documents/Arduino/3D-PAWS/3D-PAWS-Feather-LoRa-Remote/FeatherLoRaRemote/boot/
+ * Uncomment below and compile
+ * ======================================================================================================================
+ */
+// Below lines add SDUBoot support
+__attribute__ ((section(".sketch_boot")))
+unsigned char sduBoot[0x6000] = {
+    #include "boot/featherm0.h"
+};
+
+/* 
+ *=======================================================================================================================
+ * Includes
+ *=======================================================================================================================
+ */
 #include <OneWire.h>
 #include <SPI.h>
 #include <Wire.h>
@@ -128,14 +165,22 @@
 #include <Adafruit_BME280.h>
 #include <Adafruit_BMP280.h>
 #include <Adafruit_BMP3XX.h>
+#include <Adafruit_HTU21DF.h>
 #include <Adafruit_MCP9808.h>
+#include <Adafruit_SI1145.h>
 #include <Adafruit_SHT31.h>
+#include <Adafruit_VEML7700.h>
+#include <Adafruit_PM25AQI.h>
+#include <Adafruit_HDC302x.h>
+#include <Adafruit_LPS35HW.h>
+#include <Adafruit_EEPROM_I2C.h>
 #include <RH_RF95.h>
 #include <AES.h>
 #include <RTClib.h>
 #include <i2cArduino.h>
 #include <LeafSens.h>
 #include <i2cMultiSm.h>
+#include <unishox2.h>
 
 #define PCF8523_ADDRESS 0x68       // I2C address for PCF8523
 
@@ -149,73 +194,62 @@
  * 
  * ======================================================================================================================
  */
-#define SSB_PWRON           0x1      // Set at power on, but cleared after first observation
-#define SSB_SD              0x2      // Set if SD missing at boot or other SD related issues
-#define SSB_RTC             0x4      // Set if RTC missing at boot
-#define SSB_OLED            0x8      // Set if OLED missing at boot, but cleared after first observation
-#define SSB_N2S             0x10     // Set when Need to Send observations exist
-#define SSB_FROM_N2S        0x20     // Set in transmitted N2S observation when finally transmitted
-#define SSB_AS5600          0x40     // Set if wind direction sensor AS5600 has issues
-#define SSB_BMX_1           0x80     // Set if Barometric Pressure & Altitude Sensor missing
-#define SSB_BMX_2           0x100    // Set if Barometric Pressure & Altitude Sensor missing
-#define SSB_HTU21DF         0x200    // Set if Humidity & Temp Sensor missing
-#define SSB_SI1145          0x400    // Set if UV index & IR & Visible Sensor missing
-#define SSB_MCP_1           0x800    // Set if Precision I2C Temperature Sensor missing
-#define SSB_MCP_2           0x1000   // Set if Precision I2C Temperature Sensor missing
-#define SSB_LORA            0x2000   // Set if LoRa Radio missing at startup
-#define SSB_SHT_1           0x4000   // Set if SHTX1 Sensor missing
-#define SSB_SHT_2           0x8000   // Set if SHTX2 Sensor missing
-#define SSB_HIH8            0x10000  // Set if HIH8000 Sensor missing
-#define SSB_GPS             0x20000  // Set if GPS Sensor missing
-#define SSB_PM25AQI         0x40000  // Set if PM25AQI Sensor missing
-#define SSB_EEPROM          0x80000  // Set if 24LC32 EEPROM missing
-#define SSB_TLW             0x100000 // Set if Tinovi Leaf Wetness I2C Sensor missing
-#define SSB_TSM             0x200000 // Set if Tinovi Soil Moisture I2C Sensor missing
-#define SSB_TMSM            0x400000 // Set if Tinovi MultiLevel Soil Moisture I2C Sensor missing
+#define SSB_PWRON           0x1       // Set at power on, but cleared after first observation
+#define SSB_SD              0x2       // Set if SD missing at boot or other SD related issues
+#define SSB_RTC             0x4       // Set if RTC missing at boot
+#define SSB_OLED            0x8       // Set if OLED missing at boot, but cleared after first observation
+#define SSB_N2S             0x10      // Set when Need to Send observations exist
+#define SSB_FROM_N2S        0x20      // Set in transmitted N2S observation when finally transmitted
+#define SSB_EEPROM          0x40      // Set if 24LC32 EEPROM missing
+
+#define SSB_AS5600          0x80      // Set if wind direction sensor AS5600 has issues
+#define SSB_BMX_1           0x100     // Set if Barometric Pressure & Altitude Sensor missing
+#define SSB_BMX_2           0x200     // Set if Barometric Pressure & Altitude Sensor missing
+#define SSB_HTU21DF         0x400     // Set if Humidity & Temp Sensor missing
+#define SSB_SI1145          0x800     // Set if UV index & IR & Visible Sensor missing
+#define SSB_MCP_1           0x1000    // Set if MCP9808 I2C Temperature Sensor missing
+#define SSB_MCP_2           0x2000    // Set if MCP9808 I2C Temperature Sensor missing
+#define SSB_MCP_3           0x4000    // Set if MCP9808 I2C Temperature Sensor missing
+#define SSB_LORA            0x8000    // Set if LoRa Radio missing at startup
+#define SSB_SHT_1           0x10000   // Set if SHTX1 Sensor missing
+#define SSB_SHT_2           0x20000   // Set if SHTX2 Sensor missing
+#define SSB_HIH8            0x40000   // Set if HIH8000 Sensor missing
+#define SSB_VLX             0x80000   // Set if VEML7700 Sensor missing
+#define SSB_PM25AQI         0x100000  // Set if PM25AQI Sensor missing
+#define SSB_HDC_1           0x200000  // Set if HDC302x I2C Temperature Sensor missing
+#define SSB_HDC_2           0x400000  // Set if HDC302x I2C Temperature Sensor missing
+#define SSB_BLX             0x800000  // Set if BLUX30 I2C Sensor missing
+#define SSB_LPS_1           0x1000000 // Set if LPS35HW I2C Sensor missing
+#define SSB_LPS_2           0x2000000 // Set if LPS35HW I2C Sensor missing
+#define SSB_TLW             0x4000000 // Set if Tinovi Leaf Wetness I2C Sensor missing
+#define SSB_TSM             0x8000000 // Set if Tinovi Soil Moisture I2C Sensor missing
+#define SSB_TMSM            0x10000000 // Set if Tinovi MultiLevel Soil Moisture I2C Sensor missing
 
 unsigned int SystemStatusBits = SSB_PWRON; // Set bit 0 for initial value power on. Bit 0 is cleared after first obs
 bool JustPoweredOn = true;         // Used to clear SystemStatusBits set during power on device discovery
 
+#define MAX_MSGBUF_SIZE 256
 /*
  * =======================================================================================================================
  *  Globals
  * =======================================================================================================================
  */
-char msgbuf[RH_RF95_MAX_MESSAGE_LEN+1];   // 255 - 4(Header) + 1(Null) = 252
+char msgbuf[MAX_MSGBUF_SIZE];
 char *msgp;                  // Pointer to message text
 char Buffer32Bytes[32];      // General storage
-int countdown = 1800;        // Exit calibration mode when reaches 0 - protects against burnt out pin or forgotten jumper
+int countdown = 300;         // Exit calibration mode when reaches 0 - protects against burnt out pin or forgotten jumper
 unsigned int SendMsgCount=0; // Count of Messages transmitted
 int  LED_PIN = LED_BUILTIN;  // Built in LED
+
 char DeviceID[25];           // A generated ID based on board's 128-bit serial number converted down to 96bits
+
+unsigned long nextinfo=0;    // Time of Next INFO transmit 
 
 const char* pinNames[] = {
   "D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7",
   "D8", "D9", "D10", "D11", "D12", "D13",
   "A0", "A1", "A2", "A3", "A4", "A5"
 };
-
-/*
- * ======================================================================================================================
- *  SD Card
- * ======================================================================================================================
- */
-#define SD_ChipSelect 10    // GPIO 10 is Pin 10 on Feather and D5 on Particle Boron Board
-// SD;                      // File system object defined by the SD.h include file.
-File SD_fp;
-char SD_obsdir[] = "/OBS";  // Store our obs in this directory. At Power on, it is created if does not exist
-bool SD_exists = false;     // Set to true if SD card found at boot
-
-/*
- * ======================================================================================================================
- *  Optipolar Hall Effect Sensor SS451A - Interrupt 0 - Rain Gauge
- * ======================================================================================================================
- */
-#define RAIN_GAUGE_PIN  5  // D5
-volatile unsigned int rainguage_interrupt_count;
-uint64_t rainguage_interrupt_stime; // Send Time
-uint64_t rainguage_interrupt_ltime; // Last Time
-uint64_t rainguage_interrupt_toi;   // Time of Interupt
 
 /*
  * ======================================================================================================================
@@ -229,10 +263,14 @@ uint64_t rainguage_interrupt_toi;   // Time of Interupt
 #include "TM.h"                   // Time Management
 #include "LoRa.h"                 // LoRa
 #include "Sensors.h"              // I2C Based Sensors
-#include "Distance.h"             // Distance Sensor
+
+#include "OneWire.h"              // Soil Moaisture, Soil Temp (OneWire)
+#include "WRDA.h"                 // Wind Rain Distance Air
+#include "EP.h"                   // EEPROM
 #include "SDC.h"                  // SD Card
-#include "Soil.h"                 // Soil Moaisture, Soil Temp (OneWire), Rain Gauge
+
 #include "OBS.h"                  // Do Observation Processing
+#include "MUX.h"                  // PCA9548 I2C MUX
 #include "SM.h"                   // Station Monitor
 #include "INFO.h"                 // Station Information
 
@@ -265,7 +303,15 @@ void obs_interval_initialize() {
  */
 int seconds_to_next_obs() {
   now = rtc.now(); //get the current date-time
-  return ((cf_obs_period*60) - (now.unixtime() % (cf_obs_period*60))); // The mod operation gives us seconds passed                                                                    // with in this observation_period window
+  int wd_sampletime = (cf_ds_enable || AS5600_exists | PM25AQI_exists) ? 60 : 0; // Lets start next obs 1 minute early if we have wind or distance
+
+  // seconds remain until the next period boundary
+  int stno = ( (cf_obs_period*60) - (now.unixtime() % (cf_obs_period*60)) ); // The mod operation gives us seconds passed last observation period 
+
+  if (stno > wd_sampletime ) {
+    stno = stno - wd_sampletime; // We want to start the observastion early to take wind, distance, air samples.
+  }
+  return (stno);
 }
 
 void sleepinterrupt() {
@@ -283,6 +329,9 @@ void setup()
   pinMode (LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
 
+  pinMode (PM25AQI_PIN, OUTPUT); 
+  digitalWrite(PM25AQI_PIN, HIGH);
+
   Output_Initialize();
   delay(2000); // Prevents usb driver crash on startup
 
@@ -293,7 +342,7 @@ void setup()
   sprintf (msgbuf, "DevID:%s", DeviceID);
   Output (msgbuf);
   
-  delay (4000);      // Pause so user can see version if not waiting for serial
+  delay (2000);      // Pause so user can see version if not waiting for serial
 
   // https://forums.adafruit.com/viewtopic.php?f=57&t=174492&p=850337&hilit=RFM95+adalogger#p850337
   // Normally, well-behaved libraries for SPI devices would take care to set CS high when inactive. 
@@ -330,45 +379,81 @@ void setup()
   Output(msgbuf);
   delay (2000);
 
+  EEPROM_initialize();
+
   obs_interval_initialize();
-
-  //==================================================
-  // Rain Gauge Interrupt Based Sensor
-  //==================================================
-
-  if (!cf_rg_disable) {
-    // Optipolar Hall Effect Sensor SS451A - Rain Gauge
-    rainguage_interrupt_count = 0;
-    rainguage_interrupt_stime = millis();
-    rainguage_interrupt_ltime = 0;  // used to debounce the tip
-    // attachInterrupt(RAIN_GAUGE_PIN, rainguage_interrupt_handler, FALLING);
-    LowPower.attachInterruptWakeup(RAIN_GAUGE_PIN, rainguage_interrupt_handler, FALLING);
-    Output ("RG:Enabled");
+  
+  if (cf_rg1_enable) {
+    // Optipolar Hall Effect Sensor SS451A - Rain1 Gauge
+    raingauge1_interrupt_count = 0;
+    raingauge1_interrupt_stime = millis();
+    raingauge1_interrupt_ltime = 0;  // used to debounce the tip
+    LowPower.attachInterruptWakeup(RAINGAUGE1_IRQ_PIN, raingauge1_interrupt_handler, FALLING);
+    Output ("RG1:ENABLED");
   }
   else {
-    Output ("RG:Disabled");
+    Output ("RG1:NOT ENABLED");
+  }
+
+  // Optipolar Hall Effect Sensor SS451A - Rain2 Gauge
+  if (cf_rg2_enable) {
+    raingauge2_interrupt_count = 0;
+    raingauge2_interrupt_stime = millis();
+    raingauge2_interrupt_ltime = 0;  // used to debounce the tip
+    LowPower.attachInterruptWakeup(RAINGAUGE2_IRQ_PIN, raingauge2_interrupt_handler, FALLING);
+    Output ("RG2:ENABLED");
+  }
+  else {
+    Output ("RG2:NOT ENABLED");
   }
 
   //==================================================
   // Soil Moisture and Temperature Sensors
   //==================================================
   smt_initialize();
+ 
+  //==================================================
+  // Scan Mux Channels (0-6) for i2c Devices
+  //==================================================
+  mux_initialize();
 
-  //=====================
-  // Adafruit i2c Sensors
-  //=====================
+  //==================================================
+  // Scan Mux channel 7 for Air Quality
+  // When AQ is powered down it holds onto the I2C bus
+  //==================================================
+  if (MUX_exists) {
+    mux_channel_set(MUX_AQ_CHANNEL);
+    pm25aqi_initialize(); 
+    mux_channel_set(0);   
+  }
+  
+  if (!MUX_exists) {
+    tsm_initialize(); // Check main bus
+  }
+  
   bmx_initialize();
+  htu21d_initialize();  // This sensor has same i2c address as AS5600L
   mcp9808_initialize();
   sht_initialize();
+  hih8_initialize();
+  si1145_initialize();
+  vlx_initialize();
+  blx_initialize();
+  as5600_initialize();
+  hdc_initialize();
+  lps_initialize();
 
   // Tinovi Mositure Sensors
   tlw_initialize();
-  tsm_initialize();
   tmsm_initialize();
 
-  lora_initialize();
+  // Derived Observations
+  wbt_initialize();
+  hi_initialize();
+  wbgt_initialize();
 
-  INFO_Do();
+
+  lora_initialize();
 
   // Set a time to force the first observation
   wakeuptime = now.unixtime();
@@ -415,13 +500,6 @@ void loop()
 
   //Calibration mode, You can also reset the RTC here
   else if (countdown && digitalRead(SCE_PIN) == LOW) { 
-    // Every minute, Do observation (don't save to SD) and transmit - So we can test LoRa
-    I2C_Check_Sensors();
- 
-    if ( (countdown%60) == 0) { // This is here to test LoRa every minute
-      OBS_Do(false);
-    }
-    
     StationMonitor();
     
     // check for input sting, validate for rtc, set rtc, report result
@@ -435,12 +513,24 @@ void loop()
 
   // Normal Operation
   else {
-    // If we are aggressively interrupting (raining) we don't want to send LoRa messages on every interrupt
+    // Delayed initialization. We need a valid clock before we can validate the EEPROM
+    if (eeprom_exists && !eeprom_valid) {
+      EEPROM_Validate();
+      EEPROM_Dump();
+      SD_ClearRainTotals(); 
+    }
     
-    now = rtc.now();   
-    if (now.unixtime() >= wakeuptime) {   // Upon power on this will be true and OBS_Do will run
+    now = rtc.now(); 
+        
+    // Every 24 hours send INFO
+    if (now.unixtime() > nextinfo) {      // Upon power on this will be true
+      INFO_Do();
+      nextinfo = now.unixtime() + (3600 * 24);      
+    }
+
+    if (now.unixtime() >= wakeuptime) {   // Upon power on this will be true
       I2C_Check_Sensors();
-      OBS_Do(true);
+      OBS_Do();
       
       // Shutoff System Status Bits related to initialization after we have logged first observation
       JPO_ClearBits();
@@ -456,7 +546,8 @@ void loop()
     }
     else {  
 
-      Output("Going to Sleep");
+      sprintf (Buffer32Bytes, "Sleep for %us", stno);
+      Output (Buffer32Bytes);  
 
       if (LORA_exists) {
         rf95.sleep(); // LoRa will stay in sleep mode until woken by changing mode to idle, transmit or receive.

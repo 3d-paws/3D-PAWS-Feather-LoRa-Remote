@@ -1,91 +1,316 @@
 /*
  * ======================================================================================================================
  *  OBS.h - Observation Handeling
+ *  
+ *  NCSLR,[3],[10],{"at":"2025-09-25T16:53:58","id":XXX,"devid":"330eff6367815b7d93bfbcec","mtype":"OBS",}
+ *                 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+ *                          1         2         3         4         5         6         7         8         9
+ *  
+ *  LoRa Header and Tail NCSLR,[len 3],[len10], == 12 Bytes
+ *  OBS HEADER + {} = 97
+ *  Overhead = 110
+ *  LoRa Payload 222 bytes when using typical settings like Spreading Factor 7 and 125 kHz bandwidth
+ *  RadioHead RF95 library is typically using Spreading Factor = 7.
  * ======================================================================================================================
  */
+
+void mux_obs_do(int &sidx); // Prototype this function to aviod compile function unknown issue.
+
+#define OBSERVATION_INTERVAL 60   // Seconds
+#define MAX_SENSORS          64
+#define LORA_PAYLOAD         222
+#define OBS_HEADER           110
+#define OBS_SPACE            112
+
+
+typedef enum {
+  F_OBS, 
+  I_OBS, 
+  U_OBS
+} OBS_TYPE;
+
+typedef struct {
+  char          id[12];
+  int           type;
+  float         f_obs;
+  int           i_obs;
+  unsigned long u_obs;
+  bool          inuse;
+} SENSOR;
+
+typedef struct {
+  bool            inuse;                // Set to true when an observation is stored here         
+  time_t          ts;                   // TimeStamp
+  SENSOR          sensor[MAX_SENSORS];
+} OBSERVATION_STR;
+
+OBSERVATION_STR obs;
 
 /*
  * ======================================================================================================================
- * OBS_Do() - Collect Observations, Build message, Send to logging site
+ * OBS_Clear() - Set OBS to not in use
  * ======================================================================================================================
  */
-void OBS_Do (bool log_obs) {
-  char obsbuf[256];
-  float bmx1_pressure = 0.0;
-  float bmx1_temp = 0.0;
-  float bmx1_humid = 0.0;
-  float bmx2_pressure = 0.0;
-  float bmx2_temp = 0.0;
-  float bmx2_humid = 0.0;
-  float sht1_temp = 0.0;
-  float sht1_humid = 0.0;
-  float sht2_temp = 0.0;
-  float sht2_humid = 0.0;
-  float mcp1_temp = 0.0;
-  float mcp2_temp = 0.0;
-  float batt = 0.0;
-  float rain = 0.0;
-  float ds_median, ds_median_raw;
-  unsigned long rgds;    // rain gauge delta seconds, seconds since last rain gauge observation logged
-  bool SoilProbesExist = false;
+void OBS_Clear() {
+  obs.inuse =false;
+  for (int s=0; s<MAX_SENSORS; s++) {
+    obs.sensor[s].inuse = false;
+  }
+}
 
+/*
+ * ======================================================================================================================
+ * OBS_Send() - From obs structure build a JSON and send 1 or more LoRa packets as needed
+ * ======================================================================================================================
+ */
+void OBS_Send() {
+  char header[128];
+  char sensors[128];
+  char sensor[16];
+  char loramsg[256];
+  char obslog[1024];   // Holds JSON observations to write to log
+   
+  Output("OBS_SEND()");
+    
+  if (obs.inuse) {     // Sanity check set by OBS_Take()
+    memset(header, 0, sizeof(header));
+    memset(sensors, 0, sizeof(sensors));
+    memset(obslog, 0, sizeof(obslog));
+    memset(loramsg, 0, sizeof(loramsg));
+
+    // Observation will be in JSON format
+    // OBS_Take() has already obtained the time
+
+    sprintf (header, "\"at\":\"%s\",\"id\":%d,\"devid\":\"%s\",\"mtype\":\"OBS\"", 
+      timestamp, cf_lora_unitid, DeviceID);
+
+    sprintf (obslog, "%s", header);
+    
+    for (int s=0; s<MAX_SENSORS; s++) {
+      if (obs.sensor[s].inuse) {
+        switch (obs.sensor[s].type) {
+          case F_OBS :
+            sprintf (sensor, ",\"%s\":%.1f", obs.sensor[s].id, obs.sensor[s].f_obs);
+            break;
+          case I_OBS :
+            sprintf (sensor, ",\"%s\":%d", obs.sensor[s].id, obs.sensor[s].i_obs);
+            break;
+          case U_OBS :
+            sprintf (sensor, ",\"%s\":%u", obs.sensor[s].id, obs.sensor[s].i_obs);
+            break;
+          default : // Should never happen
+            Output ("WhyAmIHere?");
+            break;
+        }
+        
+        sprintf (obslog+strlen(obslog), "%s", sensor);
+        
+        // Will this Sensor observation fit into sensors
+        if ( (strlen(sensor) + strlen(sensors)) <= OBS_SPACE) {
+          // Add the sensor to the sensors
+          sprintf (sensors+strlen(sensors), "%s", sensor);
+
+        }
+        else {       
+          // Put the parts together and send
+          Output("OBS_SEND:SENDING");
+          sprintf (loramsg, "{%s%s}", header, sensors);
+          SendLoRaMessage(loramsg, "LR");
+          delay(500); // Its Recommended before sending another message
+
+          // Clear sensors and add the one that would not fit
+          memset(sensors, 0, sizeof(sensors));
+          memset(loramsg, 0, sizeof(loramsg));
+          sprintf (sensors+strlen(sensors), "%s", sensor);
+        }
+      }
+    } // for
+
+    // Send remainding obs if any
+    if (strlen(sensors)) {
+      Output("OBS_SEND:SENDING-LAST");
+      sprintf (loramsg, "{%s%s}", header, sensors);
+      SendLoRaMessage(loramsg, "LR");
+    }
+    
+    sprintf (obslog+strlen(obslog), "}"); 
+    SD_LogObservation(obslog);
+    OBS_Clear(); 
+    
+    Output("OBS_SEND:OK");
+  }
+  else {
+    Output("OBS_SEND:EMPTY");
+  }
+}
+
+/*
+ * ======================================================================================================================
+ * OBS_Take() - Take Observations - Should be called once a minute - fill data structure
+ * ======================================================================================================================
+ */
+void OBS_Take() {
+  int sidx = 0;
+  float rg1 = 0.0;
+  float rg2 = 0.0;
+  unsigned long rg1ds;   // rain gauge delta seconds, seconds since last rain gauge observation logged
+  unsigned long rg2ds;   // rain gauge delta seconds, seconds since last rain gauge observation logged
+  float ws = 0.0;
+  int wd = 0;
+  float mcp3_temp = 0.0;  // globe temperature
+  float sht1_humid = 0.0;
+  float sht1_temp = 0.0;
+  float heat_index = 0.0;
+  float wetbulb_temp = 0.0;
+
+  Output("OBS_TAKE()");
+  
   // Safty Check for Vaild Time
   if (!RTC_valid) {
-    Output ("OBS_Do: Time NV");
+    Output ("OBS_Take: TM Invalid");
     return;
   }
+  
+  OBS_Clear(); // Just do it again as a safty check
 
-  Output ("OBS_Do()");
+  obs.inuse = true;
+  rtc_timestamp(); // Set now and timestamp struture with current time
+  // now = rtc.now(); // not needed.
+  obs.ts = now.unixtime();
 
-  if (!cf_rg_disable) {
-    // Rain Gauge
-    rgds = (millis()-rainguage_interrupt_stime)/1000;
-    rain = rainguage_interrupt_count * 0.2;
-    
-    /*
-    float maxrain = rain > ((rgds / 60) * QC_MAX_RG);
-    sprintf (Buffer32Bytes, "RAIN [%d][%d.%d]RGDS[%d.%d]MR[%d.%d]",
-      rainguage_interrupt_count, (int)rain, (int)(rain*100)%100,
-      (int)rgds, (int)(rgds*100)%100,
-      (int)maxrain, (int)(maxrain*100)%100);
-    Output(Buffer32Bytes);
-    */
-    
-    rain = ( isnan(rain) || (rain < QC_MIN_RG) || (rain > (((float)rgds / 60) * QC_MAX_RG)) ) ? QC_ERR_RG : rain;
+  strcpy (obs.sensor[sidx].id, "bv");
+  obs.sensor[sidx].type = F_OBS;
+  obs.sensor[sidx].f_obs = vbat_get();
+  obs.sensor[sidx++].inuse = true;
 
-    rainguage_interrupt_count = 0;
-    rainguage_interrupt_stime = millis();
-    rainguage_interrupt_ltime = 0; // used to debounce the tip
+  strcpy (obs.sensor[sidx].id, "hth");
+  obs.sensor[sidx].type = I_OBS;
+  obs.sensor[sidx].f_obs = SystemStatusBits;
+  obs.sensor[sidx++].inuse = true;
+
+  // Rain Gauge 1 - Each tip is 0.2mm of rain
+  if (cf_rg1_enable) {
+    rg1ds = (millis()-raingauge1_interrupt_stime)/1000;  // seconds since last rain gauge observation logged
+    rg1 = raingauge1_interrupt_count * 0.2;
+    raingauge1_interrupt_count = 0;
+    raingauge1_interrupt_stime = millis();
+    raingauge1_interrupt_ltime = 0; // used to debounce the tip
+    // QC Check - Max Rain for period is (Observations Seconds / 60s) *  Max Rain for 60 Seconds
+    rg1 = (isnan(rg1) || (rg1 < QC_MIN_RG) || (rg1 > (((float)rg1ds / 60) * QC_MAX_RG)) ) ? QC_ERR_RG : rg1;
   }
 
-  if (ds_found[0] || ds_found[1]) {
-    SoilProbesExist = true;
+  // Rain Gauge 2 - Each tip is 0.2mm of rain
+  if (cf_rg2_enable) {
+    rg2ds = (millis()-raingauge2_interrupt_stime)/1000;  // seconds since last rain gauge observation logged
+    rg2 = raingauge2_interrupt_count * 0.2;
+    raingauge2_interrupt_count = 0;
+    raingauge2_interrupt_stime = millis();
+    raingauge2_interrupt_ltime = 0; // used to debounce the tip
+    // QC Check - Max Rain for period is (Observations Seconds / 60s) *  Max Rain for 60 Seconds
+    rg2 = (isnan(rg2) || (rg2 < QC_MIN_RG) || (rg2 > (((float)rg2ds / 60) * QC_MAX_RG)) ) ? QC_ERR_RG : rg2;
   }
 
+  if (cf_rg1_enable || cf_rg2_enable) {
+    if (eeprom_exists && eeprom_valid) {
+      EEPROM_UpdateRainTotals(rg1, rg2);
+    }
+  }
+ 
+  // Rain Gauge 1
+  if (cf_rg1_enable) {
+    strcpy (obs.sensor[sidx].id, "rg1");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = rg1;
+    obs.sensor[sidx++].inuse = true;
 
+    if (eeprom_exists && eeprom_valid) {
+      strcpy (obs.sensor[sidx].id, "rgt1");
+      obs.sensor[sidx].type = F_OBS;
+      obs.sensor[sidx].f_obs = eeprom.rgt1;
+      obs.sensor[sidx++].inuse = true;
 
-  // Read Dallas Temp and Soil Moisture Probes
-  if (SoilProbesExist) {
-    DoSoilReadings();
-    for (int probe=0; probe<NPROBES; probe++) {
-      if (ds_found[probe]) {       
-        sprintf (Buffer32Bytes, "S %d M%d T%d.%02d", 
-          probe+1,  sm_reading[probe],
-          (int)ds_reading[probe], (int)(ds_reading[probe]*100)%100);
-        Output (Buffer32Bytes);
-      }
+      strcpy (obs.sensor[sidx].id, "rgp1");
+      obs.sensor[sidx].type = F_OBS;
+      obs.sensor[sidx].f_obs = eeprom.rgp1;
+      obs.sensor[sidx++].inuse = true;
     }
   }
 
+  // Rain Gauge 2
+  if (cf_rg2_enable) {
+    strcpy (obs.sensor[sidx].id, "rg2");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = rg2;
+    obs.sensor[sidx++].inuse = true;
 
+    if (eeprom_exists && eeprom_valid) {
+      strcpy (obs.sensor[sidx].id, "rgt2");
+      obs.sensor[sidx].type = F_OBS;
+      obs.sensor[sidx].f_obs = eeprom.rgt2;
+      obs.sensor[sidx++].inuse = true;
+
+      strcpy (obs.sensor[sidx].id, "rgp2");
+      obs.sensor[sidx].type = F_OBS;
+      obs.sensor[sidx].f_obs = eeprom.rgp2;
+      obs.sensor[sidx++].inuse = true;
+    }
+  }
 
   if (cf_ds_enable) {
-    ds_median = ds_median_raw = DS_Median();
+    float dg_median, dg_median_raw;
+    
+    dg_median = dg_median_raw = DistanceGauge_Median();
     if (cf_ds_baseline > 0) {
-      ds_median = cf_ds_baseline - ds_median_raw;
+      dg_median = cf_ds_baseline - dg_median_raw;
     }
+
+    strcpy (obs.sensor[sidx].id, "ds");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = dg_median;
+    obs.sensor[sidx++].inuse = true;
+
+    strcpy (obs.sensor[sidx].id, "dsr");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = dg_median_raw;
+    obs.sensor[sidx++].inuse = true;
   }
 
+  if (AS5600_exists) {
+    // Wind Speed
+    ws = Wind_SpeedAverage();
+    ws = (isnan(ws) || (ws < QC_MIN_WS) || (ws > QC_MAX_WS)) ? QC_ERR_WS : ws;
+    strcpy (obs.sensor[sidx].id, "ws");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = ws;
+    obs.sensor[sidx++].inuse = true;
+
+    // Wind Direction
+    wd = Wind_DirectionVector();
+    wd = (isnan(wd) || (wd < QC_MIN_WD) || (wd > QC_MAX_WD)) ? QC_ERR_WD : wd;
+    strcpy (obs.sensor[sidx].id, "wd");
+    obs.sensor[sidx].type = I_OBS;
+    obs.sensor[sidx].i_obs = Wind_DirectionVector();
+    obs.sensor[sidx++].inuse = true;
+
+    // Wind Gust
+    ws = Wind_Gust();
+    ws = (isnan(ws) || (ws < QC_MIN_WS) || (ws > QC_MAX_WS)) ? QC_ERR_WS : ws;
+    strcpy (obs.sensor[sidx].id, "wg");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = ws;
+    obs.sensor[sidx++].inuse = true;
+
+    // Wind Gust Direction (Global)
+    wd = Wind_GustDirection();
+    wd = (isnan(wd) || (wd < QC_MIN_WD) || (wd > QC_MAX_WD)) ? QC_ERR_WD : wd;
+    strcpy (obs.sensor[sidx].id, "wgd");
+    obs.sensor[sidx].type = I_OBS;
+    obs.sensor[sidx].i_obs = wd;
+    obs.sensor[sidx++].inuse = true;
+
+    Wind_ClearSampleCount(); // Clear Counter, Counter maintain how many samples since last obs sent
+  }
+  
   //
   // Add I2C Sensors
   //
@@ -102,22 +327,42 @@ void OBS_Do (bool log_obs) {
       if (BMX_1_type == BMX_TYPE_BME280) {
         p = bme1.readPressure()/100.0F;     // bp1 hPa
         t = bme1.readTemperature();         // bt1
-        h = bme1.readHumidity();            // bh1
+        h = bme1.readHumidity();            // bh1 
       }
       if (BMX_1_type == BMX_TYPE_BMP390) {
         p = bm31.readPressure()/100.0F;     // bp1 hPa
-        t = bm31.readTemperature();         // bt1       
-      }
+        t = bm31.readTemperature();         // bt1 
+      }    
     }
     else { // BMP388
       p = bm31.readPressure()/100.0F;       // bp1 hPa
       t = bm31.readTemperature();           // bt1
     }
-    bmx1_pressure = (isnan(p) || (p < QC_MIN_P)  || (p > QC_MAX_P))  ? QC_ERR_P  : p;
-    bmx1_temp     = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
-    bmx1_humid    = (isnan(h) || (h < QC_MIN_RH) || (h > QC_MAX_RH)) ? QC_ERR_RH : h;
-  }
+    p = (isnan(p) || (p < QC_MIN_P)  || (p > QC_MAX_P))  ? QC_ERR_P  : p;
+    t = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
+    h = (isnan(h) || (h < QC_MIN_RH) || (h > QC_MAX_RH)) ? QC_ERR_RH : h;
+    
+    // BMX1 Preasure
+    strcpy (obs.sensor[sidx].id, "bp1");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = p;
+    obs.sensor[sidx++].inuse = true;
 
+    // BMX1 Temperature
+    strcpy (obs.sensor[sidx].id, "bt1");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = t;
+    obs.sensor[sidx++].inuse = true;
+
+    // BMX1 Humidity
+    if (BMX_1_type == BMX_TYPE_BME280) {
+      strcpy (obs.sensor[sidx].id, "bh1");
+      obs.sensor[sidx].type = F_OBS;
+      obs.sensor[sidx].f_obs = h;
+      obs.sensor[sidx++].inuse = true;
+    }
+  }
+  
   if (BMX_2_exists) {
     float p = 0.0;
     float t = 0.0;
@@ -134,125 +379,319 @@ void OBS_Do (bool log_obs) {
         h = bme2.readHumidity();            // bh2 
       }
       if (BMX_2_type == BMX_TYPE_BMP390) {
-        p = bm32.readPressure()/100.0F;       // bp2 hPa
-        t = bm32.readTemperature();           // bt2
-      }      
+        p = bm32.readPressure()/100.0F;     // bp2 hPa
+        t = bm32.readTemperature();         // bt2       
+      }
     }
     else { // BMP388
       p = bm32.readPressure()/100.0F;       // bp2 hPa
       t = bm32.readTemperature();           // bt2
     }
-    bmx2_pressure = (isnan(p) || (p < QC_MIN_P)  || (p > QC_MAX_P))  ? QC_ERR_P  : p;
-    bmx2_temp     = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
-    bmx2_humid    = (isnan(h) || (h < QC_MIN_RH) || (h > QC_MAX_RH)) ? QC_ERR_RH : h;
-  }
+    p = (isnan(p) || (p < QC_MIN_P)  || (p > QC_MAX_P))  ? QC_ERR_P  : p;
+    t = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
+    h = (isnan(h) || (h < QC_MIN_RH) || (h > QC_MAX_RH)) ? QC_ERR_RH : h;
 
+    // BMX2 Preasure
+    strcpy (obs.sensor[sidx].id, "bp2");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = p;
+    obs.sensor[sidx++].inuse = true;
+
+    // BMX2 Temperature
+    strcpy (obs.sensor[sidx].id, "bt2");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = t;
+    obs.sensor[sidx++].inuse = true;
+
+    // BMX2 Humidity
+    if (BMX_2_type == BMX_TYPE_BME280) {
+      strcpy (obs.sensor[sidx].id, "bh2");
+      obs.sensor[sidx].type = F_OBS;
+      obs.sensor[sidx].f_obs = h;
+      obs.sensor[sidx++].inuse = true;
+    }
+  }
+  
+  if (HTU21DF_exists) {
+    float t = 0.0;
+    float h = 0.0;
+    
+    // HTU Humidity
+    strcpy (obs.sensor[sidx].id, "hh1");
+    obs.sensor[sidx].type = F_OBS;
+    h = htu.readHumidity();
+    h = (isnan(h) || (h < QC_MIN_RH) || (h > QC_MAX_RH)) ? QC_ERR_RH : h;
+    obs.sensor[sidx].f_obs = h;
+    obs.sensor[sidx++].inuse = true;
+
+    // HTU Temperature
+    strcpy (obs.sensor[sidx].id, "ht1");
+    obs.sensor[sidx].type = F_OBS;
+    t = htu.readTemperature();
+    t = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
+    obs.sensor[sidx].f_obs = t;
+    obs.sensor[sidx++].inuse = true;
+  }
+  
   if (SHT_1_exists) {                                                                               
+    float t = 0.0;
+    float h = 0.0;
+
     // SHT1 Temperature
-    sht1_temp = sht1.readTemperature();
-    sht1_temp = (isnan(sht1_temp) || (sht1_temp < QC_MIN_T)  || (sht1_temp > QC_MAX_T))  ? QC_ERR_T  : sht1_temp;
+    strcpy (obs.sensor[sidx].id, "st1");
+    obs.sensor[sidx].type = F_OBS;
+    t = sht1.readTemperature();
+    t = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
+    obs.sensor[sidx].f_obs = t;
+    obs.sensor[sidx++].inuse = true;
+    sht1_temp = t; // save for derived observations
     
     // SHT1 Humidity   
-    sht1_humid = sht1.readHumidity();
-    sht1_humid = (isnan(sht1_humid) || (sht1_humid < QC_MIN_RH) || (sht1_humid > QC_MAX_RH)) ? QC_ERR_RH : sht1_humid;
+    strcpy (obs.sensor[sidx].id, "sh1");
+    obs.sensor[sidx].type = F_OBS;
+    h = sht1.readHumidity();
+    h = (isnan(h) || (h < QC_MIN_RH) || (h > QC_MAX_RH)) ? QC_ERR_RH : h;
+    obs.sensor[sidx].f_obs = h;
+    obs.sensor[sidx++].inuse = true;
+
+    sht1_humid = h; // save for derived observations
   }
 
   if (SHT_2_exists) {
+    float t = 0.0;
+    float h = 0.0;
+
     // SHT2 Temperature
-    sht2_temp = sht2.readTemperature();
-    sht2_temp = (isnan(sht2_temp) || (sht2_temp < QC_MIN_T)  || (sht2_temp > QC_MAX_T))  ? QC_ERR_T  : sht2_temp;
+    strcpy (obs.sensor[sidx].id, "st2");
+    obs.sensor[sidx].type = F_OBS;
+    t = sht2.readTemperature();
+    t = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
+    obs.sensor[sidx].f_obs = t;
+    obs.sensor[sidx++].inuse = true;
     
     // SHT2 Humidity   
-    sht2_humid = sht2.readHumidity();
-    sht2_humid = (isnan(sht2_humid) || (sht2_humid < QC_MIN_RH) || (sht2_humid > QC_MAX_RH)) ? QC_ERR_RH : sht2_humid;
-  }
-
-  if (MCP_1_exists) {
-    // MCP1 Temperature
-    mcp1_temp = mcp1.readTempC();
-    mcp1_temp = (isnan(mcp1_temp) || (mcp1_temp < QC_MIN_T)  || (mcp1_temp > QC_MAX_T))  ? QC_ERR_T  : mcp1_temp;
-  }
-
-  if (MCP_2_exists) {
-    // MCP2 Temperature
-    mcp2_temp = mcp2.readTempC();
-    mcp2_temp = (isnan(mcp2_temp) || (mcp2_temp < QC_MIN_T)  || (mcp2_temp > QC_MAX_T))  ? QC_ERR_T  : mcp2_temp;
+    strcpy (obs.sensor[sidx].id, "sh2");
+    obs.sensor[sidx].type = F_OBS;
+    h = sht2.readHumidity();
+    h = (isnan(h) || (h < QC_MIN_RH) || (h > QC_MAX_RH)) ? QC_ERR_RH : h;
+    obs.sensor[sidx].f_obs = h;
+    obs.sensor[sidx++].inuse = true;
   }
   
-  batt = vbat_get();
+  if (HIH8_exists) {
+    float t = 0.0;
+    float h = 0.0;
+    bool status = hih8_getTempHumid(&t, &h);
+    if (!status) {
+      t = -999.99;
+      h = 0.0;
+    }
+    t = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
+    h = (isnan(h) || (h < QC_MIN_RH) || (h > QC_MAX_RH)) ? QC_ERR_RH : h;
 
-  // Set the time for this observation
-  rtc_timestamp();
-  if (log_obs) {
-    Output(timestamp);
-  }
+    // HIH8 Temperature
+    strcpy (obs.sensor[sidx].id, "ht2");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = t;
+    obs.sensor[sidx++].inuse = true;
 
-  // Build JSON log entry by hand  
-  // {"at":"2025-08-12T17:05:18","id":72,"devid":"330eff6367815b7d93bfbcec","rg":0.00,"sg":700.00,"sgr":700.00,"sm1":1,"st1":22.50,"bp1":849.0065,"bt1":23.29,"bh1":0.00,"bv":3.76,"hth":0}
-
-  sprintf (obsbuf, "{\"at\":\"%s\",\"id\":%d,\"devid\":\"%s\",\"type\":\"OBS\",", 
-    timestamp, cf_lora_unitid, DeviceID);
-
-  if (!cf_rg_disable) {
-    
-    // sprintf (obsbuf+strlen(obsbuf), "\"rg\":%d.%02d,\"rgs\":%d,", 
-    //   (int)rain, (int)((rain < 0 ? -rain : rain)*100)%100, rgds);
-
-    sprintf (obsbuf+strlen(obsbuf), "\"rg\":%d.%02d,", 
-      (int)rain, (int)((rain < 0 ? -rain : rain) * 100)%100 );
-
-      //(int)rain, (int)(rain*100)%100);
+    // HIH8 Humidity
+    strcpy (obs.sensor[sidx].id, "hh2");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = h;
+    obs.sensor[sidx++].inuse = true;
   }
   
-  if (cf_ds_enable) {
-    sprintf (obsbuf+strlen(obsbuf), "\"sg\":%d.%02d,\"sgr\":%d.%02d,", 
-      (int)ds_median, (int)(ds_median*100)%100,
-      (int)ds_median_raw, (int)(ds_median_raw*100)%100);
-  }
-    
-  if (SoilProbesExist) {
-    for (int probe=0; probe<NPROBES; probe++) {
-      if (ds_found[probe]) {
-        sprintf (obsbuf+strlen(obsbuf), "\"sm%d\":%d,\"st%d\":%d.%02d,",  
-          probe+1, sm_reading[probe],
-          probe+1, (int)ds_reading[probe], abs((int)((ds_reading[probe]<0 ? -ds_reading[probe] : ds_reading[probe])*100)%100)); 
+  if (SI1145_exists) {
+    float si_vis = uv.readVisible();
+    float si_ir = uv.readIR();
+    float si_uv = uv.readUV()/100.0;
+
+    // Additional code to force sensor online if we are getting 0.0s back.
+    if ( ((si_vis+si_ir+si_uv) == 0.0) && ((si_last_vis+si_last_ir+si_last_uv) != 0.0) ) {
+      // Let Reset The SI1145 and try again
+      Output ("SI RESET");
+      if (uv.begin()) {
+        SI1145_exists = true;
+        Output ("SI ONLINE");
+        SystemStatusBits &= ~SSB_SI1145; // Turn Off Bit
+
+        si_vis = uv.readVisible();
+        si_ir = uv.readIR();
+        si_uv = uv.readUV()/100.0;
+      }
+      else {
+        SI1145_exists = false;
+        Output ("SI OFFLINE");
+        SystemStatusBits |= SSB_SI1145;  // Turn On Bit    
       }
     }
-  }
 
-  if (BMX_1_exists) {
-    sprintf (obsbuf+strlen(obsbuf), "\"bp1\":%u.%04d,\"bt1\":%d.%02d,\"bh1\":%d.%02d,",
-      (int)bmx1_pressure, (int)((bmx1_pressure < 0 ? -bmx1_pressure : bmx1_pressure)*100)%100,
-      (int)bmx1_temp, abs((int)((bmx1_temp < 0 ? -bmx1_temp : bmx1_temp)*100)%100),
-      (int)bmx1_humid, (int)((bmx1_humid < 0 ? -bmx1_humid : bmx1_humid)*100)%100);
+    // Save current readings for next loop around compare
+    si_last_vis = si_vis;
+    si_last_ir = si_ir;
+    si_last_uv = si_uv;
+
+    // QC Checks
+    si_vis = (isnan(si_vis) || (si_vis < QC_MIN_VI)  || (si_vis > QC_MAX_VI)) ? QC_ERR_VI  : si_vis;
+    si_ir  = (isnan(si_ir)  || (si_ir  < QC_MIN_IR)  || (si_ir  > QC_MAX_IR)) ? QC_ERR_IR  : si_ir;
+    si_uv  = (isnan(si_uv)  || (si_uv  < QC_MIN_UV)  || (si_uv  > QC_MAX_UV)) ? QC_ERR_UV  : si_uv;
+
+    // SI Visible
+    strcpy (obs.sensor[sidx].id, "sv1");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = si_vis;
+    obs.sensor[sidx++].inuse = true;
+
+    // SI IR
+    strcpy (obs.sensor[sidx].id, "si1");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = si_ir;
+    obs.sensor[sidx++].inuse = true;
+
+    // SI UV
+    strcpy (obs.sensor[sidx].id, "su1");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = si_uv;
+    obs.sensor[sidx++].inuse = true;
   }
-  if (BMX_2_exists) {
-    sprintf (obsbuf+strlen(obsbuf), "\"bp2\":%u.%04d,\"bt2\":%d.%02d,\"bh2\":%d.%02d,",
-      (int)bmx2_pressure, (int)((bmx2_pressure < 0 ? -bmx2_pressure : bmx2_pressure)*100)%100,
-      (int)bmx2_temp, abs((int)((bmx2_temp < 0 ? -bmx2_temp : bmx2_temp)*100)%100),
-      (int)bmx2_humid, (int)((bmx2_humid < 0 ? -bmx2_humid : bmx2_humid)*100)%100);
-  }
-  
-  if (SHT_1_exists) { 
-     sprintf (obsbuf+strlen(obsbuf), "\"st1\":%d.%02d,\"sh1\":%d.%02d,",
-      (int)sht1_temp, abs((int)((sht1_temp < 0 ? -sht1_temp : sht1_temp)*100)%100),
-      (int)sht1_humid, (int)((sht1_humid < 0 ? -sht1_humid : sht1_humid)*100)%100);   
-  }
-  if (SHT_2_exists) { 
-    sprintf (obsbuf+strlen(obsbuf), "\"st2\":%d.%02d,\"sh2\":%d.%02d,",
-      (int)sht2_temp, abs((int)((sht2_temp < 0 ? -sht2_temp : sht2_temp)*100)%100),
-      (int)sht2_humid, (int)((sht2_humid < 0 ? -sht2_humid : sht2_humid)*100)%100);   
-  }
-  
+    
   if (MCP_1_exists) {
-    sprintf (obsbuf+strlen(obsbuf), "\"mt1\":%d.%02d,",
-      (int)mcp1_temp, abs((int)((mcp1_temp < 0 ? -mcp1_temp : mcp1_temp)*100)%100));    
-  }
-  if (MCP_2_exists) {
-    sprintf (obsbuf+strlen(obsbuf), "\"mt2\":%d.%02d,",
-      (int)mcp1_temp, abs((int)((mcp2_temp < 0 ? -mcp2_temp : mcp2_temp)*100)%100));        
+    float t = 0.0;
+   
+    // MCP1 Temperature
+    strcpy (obs.sensor[sidx].id, "mt1");
+    obs.sensor[sidx].type = F_OBS;
+    t = mcp1.readTempC();
+    t = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
+    obs.sensor[sidx].f_obs = t;
+    obs.sensor[sidx++].inuse = true;
   }
 
+  if (MCP_2_exists) {
+    float t = 0.0;
+    
+    // MCP2 Temperature
+    strcpy (obs.sensor[sidx].id, "mt2");
+    obs.sensor[sidx].type = F_OBS;
+    t = mcp2.readTempC();
+    t = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
+    obs.sensor[sidx].f_obs = t;
+    obs.sensor[sidx++].inuse = true;
+  }
+
+  if (MCP_3_exists) {
+    float t = 0.0;
+
+    // MCP3 Globe Temperature
+    strcpy (obs.sensor[sidx].id, "gt1");
+    obs.sensor[sidx].type = F_OBS;
+    t = mcp3.readTempC();
+    t = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
+    obs.sensor[sidx].f_obs = t;
+    obs.sensor[sidx++].inuse = true;
+
+    mcp3_temp = t; // globe temperature
+  }
+
+  if (MCP_4_exists) {
+    float t = 0.0;
+
+    // MCP4 Globe Temperature
+    strcpy (obs.sensor[sidx].id, "gt2");
+    obs.sensor[sidx].type = F_OBS;
+    t = mcp4.readTempC();
+    t = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
+    obs.sensor[sidx].f_obs = t;
+    obs.sensor[sidx++].inuse = true;
+  }
+  
+  if (VEML7700_exists) {
+    float lux = veml.readLux(VEML_LUX_AUTO);
+    lux = (isnan(lux) || (lux < QC_MIN_LX)  || (lux > QC_MAX_LX))  ? QC_ERR_LX  : lux;
+
+    // VEML7700 Auto Lux Value
+    strcpy (obs.sensor[sidx].id, "lx");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = lux;
+    obs.sensor[sidx++].inuse = true;
+  }
+  
+  if (PM25AQI_exists) {
+    // Standard Particle PM1.0 concentration unit µg m3
+    strcpy (obs.sensor[sidx].id, "pm1s10");
+    obs.sensor[sidx].type = I_OBS;
+    obs.sensor[sidx].i_obs = pm25aqi_obs.max_s10;
+    obs.sensor[sidx++].inuse = true;
+
+    // Standard Particle PM2.5 concentration unit µg m3
+    strcpy (obs.sensor[sidx].id, "pm1s25");
+    obs.sensor[sidx].type = I_OBS;
+    obs.sensor[sidx].i_obs = pm25aqi_obs.max_s25;
+    obs.sensor[sidx++].inuse = true;
+
+    // Standard Particle PM10.0 concentration unit µg m3
+    strcpy (obs.sensor[sidx].id, "pm1s100");
+    obs.sensor[sidx].type = I_OBS;
+    obs.sensor[sidx].i_obs = pm25aqi_obs.max_s100;
+    obs.sensor[sidx++].inuse = true;
+
+    // Atmospheric Environmental PM1.0 concentration unit µg m3
+    strcpy (obs.sensor[sidx].id, "pm1e10");
+    obs.sensor[sidx].type = I_OBS;
+    obs.sensor[sidx].i_obs = pm25aqi_obs.max_e10;
+    obs.sensor[sidx++].inuse = true;
+
+    // Atmospheric Environmental PM2.5 concentration unit µg m3
+    strcpy (obs.sensor[sidx].id, "pm1e25");
+    obs.sensor[sidx].type = I_OBS;
+    obs.sensor[sidx].i_obs = pm25aqi_obs.max_e25;
+    obs.sensor[sidx++].inuse = true;
+
+    // Atmospheric Environmental PM10.0 concentration unit µg m3
+    strcpy (obs.sensor[sidx].id, "pm1e100");
+    obs.sensor[sidx].type = I_OBS;
+    obs.sensor[sidx].i_obs = pm25aqi_obs.max_e100;
+    obs.sensor[sidx++].inuse = true;
+
+    // Clear readings
+    pm25aqi_clear();
+  }
+  
+  // Heat Index Temperature
+  if (HI_exists) {
+    heat_index = hi_calculate(sht1_temp, sht1_humid);
+    strcpy (obs.sensor[sidx].id, "hi");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = (float) heat_index;
+    obs.sensor[sidx++].inuse = true;    
+  }
+  
+  // Wet Bulb Temperature
+  if (WBT_exists) {
+    wetbulb_temp = wbt_calculate(sht1_temp, sht1_humid);
+    strcpy (obs.sensor[sidx].id, "wbt");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = (float) wetbulb_temp;
+    obs.sensor[sidx++].inuse = true;    
+  }
+
+  // Wet Bulb Globe Temperature
+  if (WBGT_exists) {
+    float wbgt = 0.0;
+    if (MCP_3_exists) {
+      wbgt = wbgt_using_wbt(sht1_temp, mcp3_temp, wetbulb_temp); // TempAir, TempGlobe, TempWetBulb
+    }
+    else {
+      wbgt = wbgt_using_hi(heat_index);
+    }
+    strcpy (obs.sensor[sidx].id, "wbgt");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = (float) wbgt;
+    obs.sensor[sidx++].inuse = true;    
+  }
+
+  // Tinovi Leaf Wetness
   if (TLW_exists) {
     tlw.newReading();
     delay(100);
@@ -260,11 +699,18 @@ void OBS_Do (bool log_obs) {
     float t = tlw.getTemp();
     t = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
 
-    sprintf (obsbuf+strlen(obsbuf), "\"tlww\":%d.%02d,\"tlwt\":%d.%02d,",
-      (int)w, abs((int)((w < 0 ? -w : w)*100)%100), 
-      (int)t, abs((int)((t < 0 ? -t : t)*100)%100));
+    strcpy (obs.sensor[sidx].id, "tlww");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = (float) w;
+    obs.sensor[sidx++].inuse = true; 
+
+    strcpy (obs.sensor[sidx].id, "tlwt");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = (float) t;
+    obs.sensor[sidx++].inuse = true;
   }
 
+  // Tinovi Soil Moisture
   if (TSM_exists) {
     tsm.newReading();
     delay(100);
@@ -274,41 +720,95 @@ void OBS_Do (bool log_obs) {
     float t = tsm.getTemp();
     t = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
 
-    sprintf (obsbuf+strlen(obsbuf), "\"tsme25\":%d.%02d,\"tsmec\":%d.%02d,\"tsmvwc\":%d.%02d,\"tsmt\":%d.%02d,",
-      (int)e25, (int)((e25 < 0 ? -e25 : e25)*100)%100, 
-      (int)ec, (int)((ec < 0 ? -ec : ec)*100)%100,
-      (int)vwc, (int)((vwc < 0 ? -vwc : vwc)*100)%100,
-      (int)t, abs((int)((t < 0 ? -t : t)*100)%100));
+    strcpy (obs.sensor[sidx].id, "tsme25");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = (float) e25;
+    obs.sensor[sidx++].inuse = true;
+
+    strcpy (obs.sensor[sidx].id, "tsmec");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = (float) ec;
+    obs.sensor[sidx++].inuse = true;
+
+    strcpy (obs.sensor[sidx].id, "tsmvwc");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = (float) vwc;
+    obs.sensor[sidx++].inuse = true; 
+
+    strcpy (obs.sensor[sidx].id, "tsmt");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = (float) t;
+    obs.sensor[sidx++].inuse = true;
   }
 
+  // Tinovi Multi Level Soil Moisture
   if (TMSM_exists) {
     soil_ret_t multi;
-    float t1,t2;
+    float t;
 
     tmsm.newReading();
     delay(100);
     tmsm.getData(&multi);
-    t1 = multi.temp[0];
-    t1 = (isnan(t1) || (t1 < QC_MIN_T)  || (t1 > QC_MAX_T))  ? QC_ERR_T  : t1;
-    t2 = multi.temp[0];
-    t2 = (isnan(t2) || (t2 < QC_MIN_T)  || (t2 > QC_MAX_T))  ? QC_ERR_T  : t2;  
-      
-    sprintf (obsbuf+strlen(obsbuf), "\"tmsms1\":%d.%02d,\"tmsms2\":%d.%02d,\"tmsms3\":%d.%02d,\"tmsms4\":%d.%02d,\"tmsmt1\":%d.%02d,\"tmsmt2\":%d.%02d,",
-      (int)multi.vwc[0], (int)((multi.vwc[0] < 0 ? -multi.vwc[0] : multi.vwc[0])*100)%100,
-      (int)multi.vwc[1], (int)((multi.vwc[1] < 0 ? -multi.vwc[1] : multi.vwc[1])*100)%100,
-      (int)multi.vwc[2], (int)((multi.vwc[2] < 0 ? -multi.vwc[2] : multi.vwc[2])*100)%100,
-      (int)multi.vwc[3], (int)((multi.vwc[3] < 0 ? -multi.vwc[3] : multi.vwc[3])*100)%100,
-      (int)t1, abs((int)((t1 < 0 ? -t1 : t1)*100)%100),
-      (int)t2, abs((int)((t2 < 0 ? -t2 : t2)*100)%100));
-  } 
-   
-  sprintf (obsbuf+strlen(obsbuf), "\"bv\":%d.%02d,\"hth\":%d}", 
-    (int)batt, (int)(batt*100)%100, SystemStatusBits);
 
-  // Log Observation to SD Card
-  if (log_obs) {
-    SD_LogObservation(obsbuf);
+    strcpy (obs.sensor[sidx].id, "tmsms1");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = (float) multi.vwc[0];
+    obs.sensor[sidx++].inuse = true;
+
+    strcpy (obs.sensor[sidx].id, "tmsms2");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = (float) multi.vwc[1];
+    obs.sensor[sidx++].inuse = true;
+
+    strcpy (obs.sensor[sidx].id, "tmsms3");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = (float) multi.vwc[2];
+    obs.sensor[sidx++].inuse = true;
+
+    strcpy (obs.sensor[sidx].id, "tmsms4");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = (float) multi.vwc[3];
+    obs.sensor[sidx++].inuse = true;
+
+    strcpy (obs.sensor[sidx].id, "tmsms5");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = (float) multi.vwc[4];
+    obs.sensor[sidx++].inuse = true;
+    
+    t = multi.temp[0];
+    t = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
+    strcpy (obs.sensor[sidx].id, "tmsmt1");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = (float) t;
+    obs.sensor[sidx++].inuse = true;
+
+    t = multi.temp[1];
+    t = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
+    strcpy (obs.sensor[sidx].id, "tmsmt2");
+    obs.sensor[sidx].type = F_OBS;
+    obs.sensor[sidx].f_obs = (float) t;
+    obs.sensor[sidx++].inuse = true;
   }
 
-  SendOBSMessage(obsbuf);
+  // Tinovi Soil Moisture
+  mux_obs_do(sidx);
+  
+  Output("OBS_TAKE(DONE)");
+}
+
+/*
+ * ======================================================================================================================
+ * OBS_Do() - Do Observation Processing
+ * ======================================================================================================================
+ */
+void OBS_Do() {
+  Output("OBS_DO()");
+  
+  I2C_Check_Sensors(); // Make sure Sensors are online
+
+  Do_WRDA_Samples();    // Do Wind, Distance and Air Quality 1 minute of 1 second samples
+  
+  OBS_Take();          // Take an observation
+  OBS_Send();          // From obs structure build JSON and send
+
 }

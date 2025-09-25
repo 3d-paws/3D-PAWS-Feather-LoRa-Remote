@@ -84,17 +84,17 @@ void SendAESLoraWanMsg (int bits,char *msg, int msgLength)
 
 /*
  * =======================================================================================================================
- * SendOBSMessage() - Send LoRa Observation Message  - We need to keep our message size 176 bytes. Have seen docs say 200 
+ * SendLoRaMessage() - Send LoRa Observation Message  - We need to keep our message size 176 bytes. Have seen docs say 200 
  * 
  * Message Type 2 - Observation
  *   NCS    Length (N) and Checksum (CS)
- *   RS,    (R)ain (S)oil Relay Message Type
+ *   MT,    Message Type, LR or IF
  *   INT,   Station ID
  *   INT,   Transmit Counter
  *   OBS    JSON Observation
  * =======================================================================================================================
  */
-void SendOBSMessage(char *obsbuf) {
+void SendLoRaMessage(char *ops, const char *mtype) {
   int msgLength;
   unsigned short checksum;
 
@@ -104,7 +104,7 @@ void SendOBSMessage(char *obsbuf) {
                                           //    The receiving side need to know characters folling this first byte
                                           // CS is the place holder for the Checksum
   // Message type
-  sprintf (msgbuf+strlen(msgbuf), "LR,"); //  LoRa Remote Message Type
+  sprintf (msgbuf+strlen(msgbuf), "%s,", mtype); //  LoRa Remote Message Type
 
   // Station ID
   sprintf (msgbuf+strlen(msgbuf), "%d,", cf_lora_unitid);    // Must be unique if multiple are transmitting
@@ -113,9 +113,13 @@ void SendOBSMessage(char *obsbuf) {
   sprintf (msgbuf+strlen(msgbuf), "%d,", SendMsgCount++);
 
   // Observations in JSON format
-  sprintf (msgbuf+strlen(msgbuf), "%s", obsbuf);
+  sprintf (msgbuf+strlen(msgbuf), "%s", ops);
 
   msgLength = strlen(msgbuf);
+
+  sprintf (Buffer32Bytes, "OBS MSG LEN[%d]", msgLength);
+  Output (Buffer32Bytes);
+  
   // Compute checksum
   checksum=0;
   for(int i=3;i<msgLength;i++) {
