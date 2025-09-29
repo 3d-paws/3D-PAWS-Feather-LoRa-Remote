@@ -108,6 +108,7 @@ void mux_obs_do(int &sidx) {
         } // for
       } // in use
     } // for channels
+    mux_channel_set(0); // When done with MUX set to channel 0
   } // MUX_exists
   else {
     // No MUX so check main i2c bus for Sensor
@@ -205,7 +206,7 @@ void mux_initialize() {
         chs->id = 0;
       }
     }
-    mux_scan(); // Scan channels 0-6 for i2c sensors.
+    mux_scan(); // Scan channels 0-7 for i2c sensors.
   } 
   else {
     Output ("MUX NF");

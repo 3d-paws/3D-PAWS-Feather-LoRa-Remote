@@ -531,7 +531,6 @@ void Do_WRDA_Samples() {
 
     if (PM25AQI_exists) {
       Output("AQS:WAKEUP");
-      mux_channel_set(MUX_AQ_CHANNEL);
       
       digitalWrite(PM25AQI_PIN, HIGH); // Wakeup Air Quality Sensor
       
@@ -563,9 +562,12 @@ void Do_WRDA_Samples() {
         PM25_AQI_Data aqid;
         
         if (i==30) {
+          mux_channel_set(MUX_AQ_CHANNEL);
           pmaq.read(&aqid); // Toss 1st reading after wakeup
+          mux_channel_set(0);
         }
         if (i>30 && i<=40) { // 10 1s samples
+          mux_channel_set(MUX_AQ_CHANNEL);
           if (pmaq.read(&aqid)) {
             pm25aqi_obs.count++;
             pm25aqi_obs.max_s10  += aqid.pm10_standard;
@@ -574,12 +576,13 @@ void Do_WRDA_Samples() {
             pm25aqi_obs.max_e10  += aqid.pm10_env;
             pm25aqi_obs.max_e25  += aqid.pm25_env;
             pm25aqi_obs.max_e100 += aqid.pm100_env;
-sprintf (Buffer32Bytes, "AQ[%d][%d]", pm25aqi_obs.count, pm25aqi_obs.max_s10);
-Output (Buffer32Bytes);  
+            sprintf (Buffer32Bytes, "AQ[%d][%d]", pm25aqi_obs.count, pm25aqi_obs.max_s10);
+            Output (Buffer32Bytes);  
           }
           else {
             pm25aqi_obs.fail_count++;
-          }          
+          } 
+          mux_channel_set(0);         
         }
         if (i == 41) {
           Output("AQS:SLEEP");
