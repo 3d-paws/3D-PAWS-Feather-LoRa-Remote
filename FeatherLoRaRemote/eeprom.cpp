@@ -1,23 +1,25 @@
 /*
  * ======================================================================================================================
- *  EP.h - EEPROM Functions
+ *  eeprom.cpp - EEPROM Functions
  * ======================================================================================================================
  */
+#include <Arduino.h>
+#include <RTClib.h>
+#include <Adafruit_EEPROM_I2C.h>
+
+#include "include/qc.h"
+#include "include/ssbits.h"
+#include "include/wrda.h"
+#include "include/output.h"
+#include "include/time.h"
+#include "include/main.h"
+#include "include/eeprom.h"
 
 /*
  * ======================================================================================================================
- *  EEPROM NonVolitileMemory - stores rain totals in persistant memory
- * ======================================================================================================================
+ * Variables and Data Structures
+ * =======================================================================================================================
  */
-typedef struct {
-    float    rgt1;       // rain gauge total today
-    float    rgp1;       // rain gauge total prior
-    float    rgt2;       // rain gauge 2 total today
-    float    rgp2;       // rain gauge 2 total prior
-    uint32_t rgts;       // rain gauge timestamp of last modification
-    unsigned long n2sfp; // sd need 2 send file position
-    unsigned long checksum;
-} EEPROM_NVM;
 EEPROM_NVM eeprom;
 uint8_t *eeprom_ptr;
 
@@ -27,7 +29,11 @@ bool eeprom_exists = false;
 
 Adafruit_EEPROM_I2C eeprom_i2c;
 
-#define EEPROM_I2C_ADDR 0x50
+/*
+ * ======================================================================================================================
+ * Fuction Definations
+ * =======================================================================================================================
+ */
 
 /* 
  *=======================================================================================================================

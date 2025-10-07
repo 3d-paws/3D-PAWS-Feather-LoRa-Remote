@@ -1,51 +1,48 @@
 /*
  * ======================================================================================================================
- *  MUX.h - PCA9548 I2C MUX
- * 
- *  A MUX enabled sensor can not also be on the main i2c bus.
- * 
- *  Added support for Tinovi Soil Moisture sensors
+ *  mux.cpp - PCA9548 I2C MUX
  * ======================================================================================================================
  */
+#include <Arduino.h>
+#include <Wire.h>
+#include <i2cArduino.h>
+#include "include/qc.h"
+#include "include/obs.h"
+#include "include/sensors.h"
+#include "include/output.h"
+#include "include/support.h"
+#include "include/main.h"
+#include "include/mux.h"
 
- /*
-  * ======================================================================================================================
-  * Globals
-  * ======================================================================================================================
-  */
-#define MUX_CHANNELS 8
-#define MUX_AQ_CHANNEL 7
-#define MAX_CHANNEL_SENSORS 10
-#define MUX_ADDR 0x70
-bool MUX_exists = false;
-
-typedef enum {
-  UNKN, m_bmp, m_bme, m_b38, m_b39, m_htu, m_sht, m_mcp, m_hdc, m_lps, m_hih, m_tlw, m_tsm, m_si 
-} SENSOR_TYPE;
-const char *sensor_type[] = {"UNKN", "bmp", "bme", "b38", "b39", "htu", "sht", "mcp", "hdc", "lps", "hih", "tlw", "tsm", "si"};
-
-typedef enum { 
-  OFFLINE,
-  ONLINE
-} SENSOR_STATE;
-
+/*
+ * ======================================================================================================================
+ * Variables and Data Structures
+ * =======================================================================================================================
+ */
 const char *sensor_state[] = {"OFFLINE", "ONLINE"};
-
-typedef struct {
-  SENSOR_STATE  state;
-  SENSOR_TYPE   type;
-  byte          id;
-  byte          address;
-} CH_SENSOR;
-
-typedef struct {
-  bool            inuse;                // Set to true when an observation is stored here         
-  CH_SENSOR       sensor[MAX_CHANNEL_SENSORS];
-} MULTIPLEXER_STR;
-
+bool MUX_exists = false;
 MULTIPLEXER_STR mux[MUX_CHANNELS];
 MULTIPLEXER_STR *mc;
 CH_SENSOR *chs;
+const char *sensor_type[] = {"UNKN", "bmp", "bme", "b38", "b39", "htu", "sht", "mcp", "hdc", "lps", "hih", "tlw", "tsm", "si"};
+
+/*
+ * ======================================================================================================================
+ * Fuction Definations
+ * =======================================================================================================================
+ */
+
+/* 
+ *=======================================================================================================================
+ * mux_deselect_all() - set mux channel
+ *=======================================================================================================================
+ */
+void mux_deselect_all() {
+  Wire.beginTransmission(MUX_ADDR);
+  Wire.write(0);
+  Wire.endTransmission();  
+}
+
 
 /* 
  *=======================================================================================================================
@@ -108,7 +105,7 @@ void mux_obs_do(int &sidx) {
         } // for
       } // in use
     } // for channels
-    mux_channel_set(0); // When done with MUX set to channel 0
+    mux_deselect_all(); // When done with MUX set to channel 0
   } // MUX_exists
   else {
     // No MUX so check main i2c bus for Sensor
@@ -178,7 +175,7 @@ void mux_scan() {
       // Test for next sensor type
       
     }
-    mux_channel_set(0); // Leave mux on Channel 0
+    mux_deselect_all();
   }
 }
 

@@ -1,11 +1,25 @@
 /*
  * ======================================================================================================================
- *  LoRa.h - LoRa Functions
+ *  lora.cpp - LoRa Functions
  * ======================================================================================================================
  */
+ 
+#include <RH_RF95.h>
+#include <AES.h>
 
+#include "include/ssbits.h"
+#include "include/output.h"
+#include "include/cf.h"
+#include "include/main.h"
+#include "include/lora.h"
 
 /*
+ * ======================================================================================================================
+ * Variables and Data Structures
+ * =======================================================================================================================
+ */
+
+ /*
  * =======================================================================================================================
  *  AES Encryption - These need to be changed here and on the RaspberryPi (They need to match)
  * =======================================================================================================================
@@ -39,17 +53,46 @@ AES aes;
  *  SPI based deviced, that you disable interrupts while you transfer data to
  *  and from that other device.  Use cli() to disable interrupts and sei() to
  *  reenable them.
- *  
+ *
  *  Feather, uses these to control the radio module
  *  #8 - used as the radio CS (chip select) pin
  *  #3 - used as the radio GPIO0 / IRQ (interrupt request) pin.
  *  #4 - used as the radio Reset pin
  * =======================================================================================================================
  */
-#define LORA_SS   8
-#define LORA_INT  3     // Feather 32u4 LoRa used pin 7
 RH_RF95 rf95(LORA_SS, LORA_INT);
+
 bool LORA_exists = false;
+unsigned int SendMsgCount=0; // Count of Messages transmitted
+
+/*
+ * ======================================================================================================================
+ * Fuction Definations
+ * =======================================================================================================================
+ */
+
+/*
+ * =======================================================================================================================
+ * LoRaDisableSPI() 
+ * =======================================================================================================================
+ */
+void LoRaDisableSPI() {
+  // Disable LoRA SPI0 Chip Select
+  pinMode(LORA_SS, OUTPUT);
+  digitalWrite(LORA_SS, HIGH);
+}
+
+/*
+ * =======================================================================================================================
+ * LoRaSleep() 
+ * =======================================================================================================================
+ */
+void LoRaSleep() {
+  if (LORA_exists) {
+    rf95.sleep(); // LoRa will stay in sleep mode until woken by changing mode to idle, transmit or receive.
+                  // (eg by calling send(), recv(), available() etc
+  }
+}
 
 /*
  * =======================================================================================================================
@@ -71,9 +114,7 @@ void SendAESLoraWanMsg (int bits,char *msg, int msgLength)
     rf95.send(cipher, padedLength);
     rf95.waitPacketSent();
 
-    // Disable LoRA SPI0 Chip Select
-    pinMode(LORA_SS, OUTPUT);
-    digitalWrite(LORA_SS, HIGH);
+    LoRaDisableSPI(); // Disable LoRA SPI0 Chip Select
   
     Output("LoRa Transmitted");
   }

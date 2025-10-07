@@ -1,13 +1,40 @@
 /*
  * ======================================================================================================================
- *  INFO.h - Report Information about the station at boot
+ *  info.cpp - Station Information Functions
  * ======================================================================================================================
  */
+#include <Arduino.h>
+#include <SD.h>
+#include <RTClib.h>
 
+#include "include/ssbits.h"
+#include "include/mux.h"
+#include "include/eeprom.h"
+#include "include/cf.h"
+#include "include/sensors.h"
+#include "include/wrda.h"
+#include "include/sdcard.h"
+#include "include/output.h"
+#include "include/lora.h"
+#include "include/smt.h"
+#include "include/support.h"
+#include "include/time.h"
+#include "include/main.h"
+#include "include/info.h"
+
+/*
+ * ======================================================================================================================
+ * Variables and Data Structures 
+ * =======================================================================================================================
+ */
 char SD_INFO_FILE[] = "INFO.TXT";       // Store INFO information in this file. Every INFO call will overwrite content
+
+/*
+ * ======================================================================================================================
+ * Fuction Definations
+ * =======================================================================================================================
+ */
  
-// Prototyping functions to aviod compile function unknown issue.
-int seconds_to_next_obs();
 /*
  * ======================================================================================================================
  * INFO_Do() - Get and Send System Information

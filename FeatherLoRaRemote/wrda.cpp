@@ -1,23 +1,26 @@
 /*
  * ======================================================================================================================
- *  WRDA.h - Wind Rain Distance Air Functions
+ *  wrda.cpp - Wind Rain Distance Air Functions
  * ======================================================================================================================
  */
+#include <Arduino.h>
+#include <Wire.h>
+#include <ArduinoLowPower.h>
 
- // Prototyping functions to aviod compile function unknown issue.
- void mux_channel_set(uint8_t channel);
-#ifndef MUX_AQ_CHANNEL
-#define MUX_AQ_CHANNEL 7
-#endif
+#include "include/ssbits.h"
+#include "include/mux.h"
+#include "include/sensors.h"
+#include "include/cf.h"
+#include "include/output.h"
+#include "include/support.h"
+#include "include/main.h"
+#include "include/wrda.h"
 
- /*
+/*
  * ======================================================================================================================
- *  Rain Gauges
- * ======================================================================================================================
+ * Variables and Data Structures
+ * =======================================================================================================================
  */
-#define RAINGAUGE1_IRQ_PIN  A3
-#define RAINGAUGE2_IRQ_PIN  A4
-
 /*
  * ======================================================================================================================
  *  Rain Gauge 1 - Optipolar Hall Effect Sensor SS451A
@@ -27,19 +30,6 @@ volatile unsigned int raingauge1_interrupt_count=0;
 uint64_t raingauge1_interrupt_stime; // Send Time
 uint64_t raingauge1_interrupt_ltime; // Last Time
 uint64_t raingauge1_interrupt_toi;   // Time of Interrupt
-
-/*
- * ======================================================================================================================
- *  raingauge1_interrupt_handler() - This function is called whenever a magnet/interrupt is detected by the arduino
- * ======================================================================================================================
- */
-void raingauge1_interrupt_handler()
-{
-  if ((millis() - raingauge1_interrupt_ltime) > 500) { // Count tip if a half second has gone by since last interrupt
-    raingauge1_interrupt_ltime = millis();
-    raingauge1_interrupt_count++;
-  }   
-}
 
 /*
  * ======================================================================================================================
@@ -53,72 +43,14 @@ uint64_t raingauge2_interrupt_toi;   // Time of Interrupt
 
 /*
  * ======================================================================================================================
- *  raingauge2_interrupt_handler() - This function is called whenever a magnet/interrupt is detected by the arduino
- * ======================================================================================================================
- */
-void raingauge2_interrupt_handler()
-{
-  if ((millis() - raingauge2_interrupt_ltime) > 500) { // Count tip if a half second has gone by since last interrupt
-    raingauge2_interrupt_ltime = millis();
-    raingauge2_interrupt_count++;
-  }   
-}
-
-/*
- * ======================================================================================================================
- *  SAMPLE Buckets
- * ======================================================================================================================  
- */
-#define SAMPLES 60
-
-/*
- * ======================================================================================================================
- *  Wind Related Setup
- * 
- *  NOTE: With interrupts tied to the anemometer rotation we are essentually sampling all the time.  
- *        We record the interrupt count, ms duration and wind direction every second.
- *        One revolution of the anemometer results in 2 interrupts. There are 2 magnets on the anemometer.
- * 
- *        Station observations are logged every minute
- *        Wind and Direction are sampled every second producing 60 samples 
- *        The one second wind speed sample are produced from the interrupt count and ms duration.
- *        Wind Observations a 
- *        Reported Observations
- *          Wind Speed = Average of the 60 samples.
- *          Wind Direction = Average of the 60 vectors from Direction and Speed.
- *          Wind Gust = Highest 3 consecutive samples from the 60 samples. The 3 samples are then averaged.
- *          Wind Gust Direction = Average of the 3 Vectors from the Wind Gust samples.
- *          
- * ======================================================================================================================
- */
- 
-#define ANEMOMETER_IRQ_PIN  A2
-#define WIND_READINGS       SAMPLES       // One minute of 1s Samples
-
-typedef struct {
-  int direction;
-  float speed;
-} WIND_BUCKETS_STR;
-
-typedef struct {
-  WIND_BUCKETS_STR bucket[WIND_READINGS];
-  int bucket_idx;
-  float gust;
-  int gust_direction;
-  int sample_count;
-} WIND_STR;
-WIND_STR wind;
-
-/*
- * ======================================================================================================================
  *  Wind Direction - AS5600 Sensor
  * ======================================================================================================================
  */
+WIND_STR wind;
 bool      AS5600_exists     = false;
 int       AS5600_ADR        = 0x36;
 const int AS5600_raw_ang_hi = 0x0c;
 const int AS5600_raw_ang_lo = 0x0d;
-
 
 /*
  * ======================================================================================================================
@@ -135,6 +67,61 @@ float ws_radius = 0.079;           // In meters
  */
 volatile unsigned int anemometer_interrupt_count;
 uint64_t anemometer_interrupt_stime;
+
+/*
+ * =======================================================================================================================
+ *  Distance Gauge
+ * =======================================================================================================================
+ */
+/*
+ * Distance Sensors
+ * The 5-meter sensors (MB7360, MB7369, MB7380, and MB7389) use a scale factor of (Vcc/5120) per 1-mm.
+ * Particle 12bit resolution (0-4095),  Sensor has a resolution of 0 - 5119mm,  Each unit of the 0-4095 resolution is 1.25mm
+ * Feather has 10bit resolution (0-1023), Sensor has a resolution of 0 - 5119mm, Each unit of the 0-1023 resolution is 5mm
+ *
+ * The 10-meter sensors (MB7363, MB7366, MB7383, and MB7386) use a scale factor of (Vcc/10240) per 1-mm.
+ * Particle 12bit resolution (0-4095), Sensor has a resolution of 0 - 10239mm, Each unit of the 0-4095 resolution is 2.5mm
+ * Feather has 10bit resolution (0-1023), Sensor has a resolution of 0 - 10239mm, Each unit of the 0-1023 resolution is 10mm
+ *
+ * The distance sensor will report as type sg  for Snow, Stream, or Surge gauge deployments.
+ * A Median value based on 60 samples 250ms apart is obtain. Then subtracted from ds_baseline for the observation.
+ */
+unsigned int dg_bucket = 0;
+unsigned int dg_resolution_adjust = 5; // Default is 5m sensor
+unsigned int dg_buckets[DG_BUCKETS];
+
+/*
+ * ======================================================================================================================
+ * Fuction Definations
+ * =======================================================================================================================
+ */
+
+/*
+ * ======================================================================================================================
+ *  raingauge1_interrupt_handler() - This function is called whenever a magnet/interrupt is detected by the arduino
+ * ======================================================================================================================
+ */
+void raingauge1_interrupt_handler()
+{
+  if ((millis() - raingauge1_interrupt_ltime) > 500) { // Count tip if a half second has gone by since last interrupt
+    raingauge1_interrupt_ltime = millis();
+    raingauge1_interrupt_count++;
+  }   
+}
+
+/*
+ * ======================================================================================================================
+ *  raingauge2_interrupt_handler() - This function is called whenever a magnet/interrupt is detected by the arduino
+ * ======================================================================================================================
+ */
+void raingauge2_interrupt_handler()
+{
+  if ((millis() - raingauge2_interrupt_ltime) > 500) { // Count tip if a half second has gone by since last interrupt
+    raingauge2_interrupt_ltime = millis();
+    raingauge2_interrupt_count++;
+  }   
+}
+
 
 /*
  * ======================================================================================================================
@@ -444,32 +431,6 @@ void as5600_initialize() {
 }
 
 /*
- * =======================================================================================================================
- *  Distance Gauge
- * =======================================================================================================================
- */
-/*
- * Distance Sensors
- * The 5-meter sensors (MB7360, MB7369, MB7380, and MB7389) use a scale factor of (Vcc/5120) per 1-mm.
- * Particle 12bit resolution (0-4095),  Sensor has a resolution of 0 - 5119mm,  Each unit of the 0-4095 resolution is 1.25mm
- * Feather has 10bit resolution (0-1023), Sensor has a resolution of 0 - 5119mm, Each unit of the 0-1023 resolution is 5mm
- * 
- * The 10-meter sensors (MB7363, MB7366, MB7383, and MB7386) use a scale factor of (Vcc/10240) per 1-mm.
- * Particle 12bit resolution (0-4095), Sensor has a resolution of 0 - 10239mm, Each unit of the 0-4095 resolution is 2.5mm
- * Feather has 10bit resolution (0-1023), Sensor has a resolution of 0 - 10239mm, Each unit of the 0-1023 resolution is 10mm
- * 
- * The distance sensor will report as type sg  for Snow, Stream, or Surge gauge deployments.
- * A Median value based on 60 samples 250ms apart is obtain. Then subtracted from ds_baseline for the observation.
- */
- 
-#define DISTANCE_GAUGE_PIN     A5
-#define DG_BUCKETS SAMPLES
-
-unsigned int dg_bucket = 0;
-unsigned int dg_resolution_adjust = 5; // Default is 5m sensor
-unsigned int dg_buckets[DG_BUCKETS];
-
-/*
  * ======================================================================================================================
  * DistanceGauge_TakeReading - measure every second             
  * ======================================================================================================================
@@ -551,6 +512,7 @@ void Do_WRDA_Samples() {
 
     // Take 60 1s samples of wind speed and direction and fill arrays with values.
     Output("SAMPLING");
+//int c=200;
     for (int i=0; i< 60; i++) {
       if (AS5600_exists) {
         Wind_TakeReading();
@@ -564,9 +526,14 @@ void Do_WRDA_Samples() {
         if (i==30) {
           mux_channel_set(MUX_AQ_CHANNEL);
           pmaq.read(&aqid); // Toss 1st reading after wakeup
-          mux_channel_set(0);
+          mux_deselect_all();
         }
-        if (i>30 && i<=40) { // 10 1s samples
+
+        if ((i>30 && i<=40)) { // 10 1s samples
+        // if (c-- || (i>30 && i<=40)) { // 10 1s samples
+          //while (c--) {
+          //digitalWrite(PM25AQI_PIN, HIGH);
+          //delay(10000);
           mux_channel_set(MUX_AQ_CHANNEL);
           if (pmaq.read(&aqid)) {
             pm25aqi_obs.count++;
@@ -582,7 +549,12 @@ void Do_WRDA_Samples() {
           else {
             pm25aqi_obs.fail_count++;
           } 
-          mux_channel_set(0);         
+          mux_deselect_all();
+          //if (SerialConsoleEnabled) Serial.print(".");  // Provide Serial Console some feedback as we loop and wait til next observation 
+          //OLED_spin();
+          //digitalWrite(PM25AQI_PIN, LOW);
+          //delay(5000);
+          //}       
         }
         if (i == 41) {
           Output("AQS:SLEEP");
@@ -594,10 +566,8 @@ void Do_WRDA_Samples() {
           // SDA/SCL lines when "asleep".
               
           // Move to another mux channel before we power dower the AQ sensor. To avoid the above.
-          mux_channel_set(0);  
-          
-          digitalWrite(PM25AQI_PIN, LOW); // Put to Sleep Air Quality Sensor
-     
+          mux_deselect_all();  
+          digitalWrite(PM25AQI_PIN, LOW); // Put to Sleep Air Quality Sensor  
         }
       }
       if (SerialConsoleEnabled) Serial.print(".");  // Provide Serial Console some feedback as we loop and wait til next observation

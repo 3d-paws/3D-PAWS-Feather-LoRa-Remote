@@ -1,6 +1,6 @@
 /*
  * ======================================================================================================================
- *  Quality Control - Min and Max Sensor Values on Surface of the Earth
+ *  Quality Control - Min and Max Sensor Values on Surface of the Earth Definations
  * ======================================================================================================================
  */
 // Temperature

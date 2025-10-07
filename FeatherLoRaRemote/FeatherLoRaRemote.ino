@@ -1,6 +1,4 @@
 #define COPYRIGHT "Copyright [2025] [University Corporation for Atmospheric Research]"
-#define VERSION_INFO "FLoRaRemote-250925"
-
 /*
  *======================================================================================================================
  * FeatherLoRaRemote - 3D-PAWS-Feather-LoRaRemote
@@ -36,7 +34,11 @@
  *                            Added adafeatherM0.h
  *           2025-09-23 RJB Fixed checksum error on LoRa INFO messages
  *                          Added the chunking of the observers into multiple lora packets
- *                          
+ *           2025-10-05 RJB Code clean up, True .h files with corresponding.cpp files.          
+ *                          added mux_deselect_all() and changed all mux_channel_set(0) to this
+ *                          added void LoRaDisableSPI() used in CF.cpp
+ *                          Added LoRaSleep() use in loop()
+ *           
  * Time Format: 2022:09:19:19:10:00  YYYY:MM:DD:HR:MN:SS
  * 
  * ======================================================================================================================
@@ -157,162 +159,40 @@ unsigned char sduBoot[0x6000] = {
  * Includes
  *=======================================================================================================================
  */
-#include <OneWire.h>
-#include <SPI.h>
-#include <Wire.h>
 #include <ArduinoLowPower.h>
 #include <SD.h>
-#include <Adafruit_BME280.h>
-#include <Adafruit_BMP280.h>
-#include <Adafruit_BMP3XX.h>
-#include <Adafruit_HTU21DF.h>
-#include <Adafruit_MCP9808.h>
-#include <Adafruit_SI1145.h>
-#include <Adafruit_SHT31.h>
-#include <Adafruit_VEML7700.h>
-#include <Adafruit_PM25AQI.h>
-#include <Adafruit_HDC302x.h>
-#include <Adafruit_LPS35HW.h>
-#include <Adafruit_EEPROM_I2C.h>
-#include <RH_RF95.h>
-#include <AES.h>
 #include <RTClib.h>
-#include <i2cArduino.h>
-#include <LeafSens.h>
-#include <i2cMultiSm.h>
-#include <unishox2.h>
 
-#define PCF8523_ADDRESS 0x68       // I2C address for PCF8523
-
+#include "include/ssbits.h"
+#include "include/mux.h"
+#include "include/qc.h"
+#include "include/eeprom.h"
+#include "include/obs.h"
+#include "include/wrda.h"
+#include "include/cf.h"
+#include "include/sdcard.h"
+#include "include/info.h"
+#include "include/sensors.h"
+#include "include/output.h"
+#include "include/lora.h"
+#include "include/statmon.h"
+#include "include/smt.h"
+#include "include/support.h"
+#include "include/time.h"
+#include "include/main.h"
 
 /*
  * ======================================================================================================================
- * System Status Bits used for report health of systems - 0 = OK
- * 
- * OFF =   SSB &= ~SSB_PWRON
- * ON =    SSB |= SSB_PWROFF
- * 
- * ======================================================================================================================
- */
-#define SSB_PWRON           0x1       // Set at power on, but cleared after first observation
-#define SSB_SD              0x2       // Set if SD missing at boot or other SD related issues
-#define SSB_RTC             0x4       // Set if RTC missing at boot
-#define SSB_OLED            0x8       // Set if OLED missing at boot, but cleared after first observation
-#define SSB_N2S             0x10      // Set when Need to Send observations exist
-#define SSB_FROM_N2S        0x20      // Set in transmitted N2S observation when finally transmitted
-#define SSB_EEPROM          0x40      // Set if 24LC32 EEPROM missing
-
-#define SSB_AS5600          0x80      // Set if wind direction sensor AS5600 has issues
-#define SSB_BMX_1           0x100     // Set if Barometric Pressure & Altitude Sensor missing
-#define SSB_BMX_2           0x200     // Set if Barometric Pressure & Altitude Sensor missing
-#define SSB_HTU21DF         0x400     // Set if Humidity & Temp Sensor missing
-#define SSB_SI1145          0x800     // Set if UV index & IR & Visible Sensor missing
-#define SSB_MCP_1           0x1000    // Set if MCP9808 I2C Temperature Sensor missing
-#define SSB_MCP_2           0x2000    // Set if MCP9808 I2C Temperature Sensor missing
-#define SSB_MCP_3           0x4000    // Set if MCP9808 I2C Temperature Sensor missing
-#define SSB_LORA            0x8000    // Set if LoRa Radio missing at startup
-#define SSB_SHT_1           0x10000   // Set if SHTX1 Sensor missing
-#define SSB_SHT_2           0x20000   // Set if SHTX2 Sensor missing
-#define SSB_HIH8            0x40000   // Set if HIH8000 Sensor missing
-#define SSB_VLX             0x80000   // Set if VEML7700 Sensor missing
-#define SSB_PM25AQI         0x100000  // Set if PM25AQI Sensor missing
-#define SSB_HDC_1           0x200000  // Set if HDC302x I2C Temperature Sensor missing
-#define SSB_HDC_2           0x400000  // Set if HDC302x I2C Temperature Sensor missing
-#define SSB_BLX             0x800000  // Set if BLUX30 I2C Sensor missing
-#define SSB_LPS_1           0x1000000 // Set if LPS35HW I2C Sensor missing
-#define SSB_LPS_2           0x2000000 // Set if LPS35HW I2C Sensor missing
-#define SSB_TLW             0x4000000 // Set if Tinovi Leaf Wetness I2C Sensor missing
-#define SSB_TSM             0x8000000 // Set if Tinovi Soil Moisture I2C Sensor missing
-#define SSB_TMSM            0x10000000 // Set if Tinovi MultiLevel Soil Moisture I2C Sensor missing
-
-unsigned int SystemStatusBits = SSB_PWRON; // Set bit 0 for initial value power on. Bit 0 is cleared after first obs
-bool JustPoweredOn = true;         // Used to clear SystemStatusBits set during power on device discovery
-
-#define MAX_MSGBUF_SIZE 256
-/*
- * =======================================================================================================================
- *  Globals
+ * Variables and Data Structures 
  * =======================================================================================================================
  */
-char msgbuf[MAX_MSGBUF_SIZE];
-char *msgp;                  // Pointer to message text
-char Buffer32Bytes[32];      // General storage
+bool JustPoweredOn = true;   // Used to clear SystemStatusBits set during power on device discovery
+char msgbuf[MAX_MSGBUF_SIZE];// Buffer used all over the code
+char *msgp;                  // Pointer used all over the code
+char Buffer32Bytes[32];      // Buffer used all over the code
 int countdown = 300;         // Exit calibration mode when reaches 0 - protects against burnt out pin or forgotten jumper
-unsigned int SendMsgCount=0; // Count of Messages transmitted
-int  LED_PIN = LED_BUILTIN;  // Built in LED
+unsigned long nextinfo=0;    // Time of Next INFO transmit
 
-char DeviceID[25];           // A generated ID based on board's 128-bit serial number converted down to 96bits
-
-unsigned long nextinfo=0;    // Time of Next INFO transmit 
-
-const char* pinNames[] = {
-  "D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7",
-  "D8", "D9", "D10", "D11", "D12", "D13",
-  "A0", "A1", "A2", "A3", "A4", "A5"
-};
-
-/*
- * ======================================================================================================================
- *  Local Code Includes - Do not change the order of the below 
- * ======================================================================================================================
- */
-#include "QC.h"                   // Quality Control Min and Max Sensor Values on Surface of the Earth
-#include "SF.h"                   // Support Functions
-#include "OP.h"                   // OutPut support for OLED and Serial Console
-#include "CF.h"                   // Configuration File Variables
-#include "TM.h"                   // Time Management
-#include "LoRa.h"                 // LoRa
-#include "Sensors.h"              // I2C Based Sensors
-
-#include "OneWire.h"              // Soil Moaisture, Soil Temp (OneWire)
-#include "WRDA.h"                 // Wind Rain Distance Air
-#include "EP.h"                   // EEPROM
-#include "SDC.h"                  // SD Card
-
-#include "OBS.h"                  // Do Observation Processing
-#include "MUX.h"                  // PCA9548 I2C MUX
-#include "SM.h"                   // Station Monitor
-#include "INFO.h"                 // Station Information
-
-/* 
- *=======================================================================================================================
- * obs_interval_initialize() - observation interval 5,6,10,15,20,30
- *=======================================================================================================================
- */
-void obs_interval_initialize() {
-  if ((cf_obs_period != 5) && 
-      (cf_obs_period != 6) && 
-      (cf_obs_period != 10) &&
-      (cf_obs_period != 15) &&
-      (cf_obs_period != 20) &&
-      (cf_obs_period != 30)) {
-    sprintf (Buffer32Bytes, "OBS Interval:%dm Now:15m", cf_obs_period);
-    Output(Buffer32Bytes);
-    cf_obs_period = 15; 
-  }
-  else {
-    sprintf (Buffer32Bytes, "OBS Interval:%dm", cf_obs_period);
-    Output(Buffer32Bytes);    
-  }
-}
-
-/* 
- *=======================================================================================================================
- * seconds_to_next_obs() - This will return seconds to next observation
- *=======================================================================================================================
- */
-int seconds_to_next_obs() {
-  now = rtc.now(); //get the current date-time
-  int wd_sampletime = (cf_ds_enable || AS5600_exists | PM25AQI_exists) ? 60 : 0; // Lets start next obs 1 minute early if we have wind or distance
-
-  // seconds remain until the next period boundary
-  int stno = ( (cf_obs_period*60) - (now.unixtime() % (cf_obs_period*60)) ); // The mod operation gives us seconds passed last observation period 
-
-  if (stno > wd_sampletime ) {
-    stno = stno - wd_sampletime; // We want to start the observastion early to take wind, distance, air samples.
-  }
-  return (stno);
-}
 
 void sleepinterrupt() {
   Output("I");
@@ -350,9 +230,7 @@ void setup()
   // When I need to use the radio again, should I set pin 8 to low?
   // No, the driver will handle it for you. You just have to make sure it is high when not in use.
   
-  pinMode(LORA_SS, OUTPUT);
-  digitalWrite(LORA_SS, HIGH);
-  // pinMode(LORA_SS, INPUT_PULLUP); // required since RFM95W is also on the SPI bus
+  LoRaDisableSPI();
 
   // Initialize SD card if we have one.
   SD_initialize();
@@ -424,7 +302,7 @@ void setup()
   if (MUX_exists) {
     mux_channel_set(MUX_AQ_CHANNEL);
     pm25aqi_initialize(); 
-    mux_channel_set(0);   
+    mux_deselect_all();   
   }
   
   if (!MUX_exists) {
@@ -549,10 +427,7 @@ void loop()
       sprintf (Buffer32Bytes, "Sleep for %us", stno);
       Output (Buffer32Bytes);  
 
-      if (LORA_exists) {
-        rf95.sleep(); // LoRa will stay in sleep mode until woken by changing mode to idle, transmit or receive.
-                      // (eg by calling send(), recv(), available() etc
-      }
+      LoRaSleep();
     
       OLED_sleepDisplay();
 

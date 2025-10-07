@@ -1,6 +1,6 @@
 /*
  * ======================================================================================================================
- *  OBS.h - Observation Handeling
+ *  obs.cpp - Observation Handeling
  *  
  *  NCSLR,[3],[10],{"at":"2025-09-25T16:53:58","id":XXX,"devid":"330eff6367815b7d93bfbcec","mtype":"OBS",}
  *                 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
@@ -13,38 +13,37 @@
  *  RadioHead RF95 library is typically using Spreading Factor = 7.
  * ======================================================================================================================
  */
+#include <Arduino.h>
+#include <SD.h>
+#include <RTClib.h>
+#include <Adafruit_EEPROM_I2C.h>
+#include "include/qc.h"
+#include "include/ssbits.h"
+#include "include/mux.h"
+#include "include/sensors.h"
+#include "include/eeprom.h"
+#include "include/wrda.h"
+#include "include/cf.h"
+#include "include/sdcard.h"
+#include "include/output.h"
+#include "include/lora.h"
+#include "include/support.h"
+#include "include/time.h"
+#include "include/main.h"
+#include "include/obs.h"
 
-void mux_obs_do(int &sidx); // Prototype this function to aviod compile function unknown issue.
-
-#define OBSERVATION_INTERVAL 60   // Seconds
-#define MAX_SENSORS          64
-#define LORA_PAYLOAD         222
-#define OBS_HEADER           110
-#define OBS_SPACE            112
-
-
-typedef enum {
-  F_OBS, 
-  I_OBS, 
-  U_OBS
-} OBS_TYPE;
-
-typedef struct {
-  char          id[12];
-  int           type;
-  float         f_obs;
-  int           i_obs;
-  unsigned long u_obs;
-  bool          inuse;
-} SENSOR;
-
-typedef struct {
-  bool            inuse;                // Set to true when an observation is stored here         
-  time_t          ts;                   // TimeStamp
-  SENSOR          sensor[MAX_SENSORS];
-} OBSERVATION_STR;
-
+/*
+ * ======================================================================================================================
+ * Variables and Data Structures
+ * =======================================================================================================================
+ */
 OBSERVATION_STR obs;
+
+/*
+ * ======================================================================================================================
+ * Fuction Definations
+ * =======================================================================================================================
+ */
 
 /*
  * ======================================================================================================================

@@ -1,7 +1,34 @@
 /*
  * ======================================================================================================================
- * StationMonitor() - When Jumper set Display StationMonitor()
+ * statmon.cpp - Station Monitor - When Jumper Set Main Loop runs StationMonitor()
  * ======================================================================================================================
+ */
+#include <Arduino.h>
+#include <RTClib.h>
+
+#include "include/ssbits.h"
+#include "include/mux.h"
+#include "include/sensors.h"
+#include "include/wrda.h"
+#include "include/cf.h"
+#include "include/output.h"
+#include "include/smt.h"
+#include "include/support.h"
+#include "include/time.h"
+#include "include/main.h"
+#include "include/statmon.h"
+
+/*
+ * ======================================================================================================================
+ * Variables and Data Structures
+ * =======================================================================================================================
+ */
+
+
+/*
+ * ======================================================================================================================
+ * Fuction Definations
+ * =======================================================================================================================
  */
 
  /*

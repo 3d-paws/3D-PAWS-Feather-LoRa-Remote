@@ -1,52 +1,44 @@
 /*
  * ======================================================================================================================
- *  Soil.h - Soil Moaisture, Soil Temp (OneWire), Rain Gauge
+ * smt.cpp - Soil Moaisture (Analog) and Soil Temp (OneWire) Pairs Functions
  * ======================================================================================================================
  */
+#include <Arduino.h>
+#include <OneWire.h>
 
- /*
- * =======================================================================================================================
- *  Number of Soil Moisture Sensors Connected
- * =======================================================================================================================
- */
-#define NPROBES           1        // Max Number of Soil Probes
-
-
- /*
- * =======================================================================================================================
- *  Number of Soil Moisture Sensors Connected
- * =======================================================================================================================
- */
-#define PROBES_POWER_PIN  11       // Pin for enambling power to Dallas and Soil Moisture Sensors
+#include "include/qc.h"
+#include "include/output.h"
+#include "include/main.h"
+#include "include/smt.h"
 
 /*
- * =======================================================================================================================
- *  Soil Moisture Sensor
+ * ======================================================================================================================
+ * Variables and Data Structures
  * =======================================================================================================================
  */
-// Define Soil Moisture Sensor Pin Names
+// Define Soil Moisture Sensors
 int sm_pn[NPROBES] = { A0 };
 int sm_reading[NPROBES] = { -1 };
 
-/*
- * =======================================================================================================================
- *  One Wire
- * =======================================================================================================================
- */
-#define DS0_PIN A1
+// Define One Wire Temperature Sensors
 int st_pn[NPROBES] = { DS0_PIN };
 // Allociation for each pin with Dallas Sensors attached
 OneWire  ds[NPROBES] = { OneWire(DS0_PIN) };
 
-
 // Dallas Sensor Address
-byte ds_addr[NPROBES][8] = { 
+byte ds_addr[NPROBES][8] = {
   {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}
 };
 
 bool  ds_found[NPROBES]    = { false };
 float ds_reading[NPROBES]  = { 0.0 };
 bool  ds_valid[NPROBES]    = { false };
+
+/*
+ * ======================================================================================================================
+ * Fuction Definations
+ * =======================================================================================================================
+ */
 
 /*
  * =============================================================
@@ -230,7 +222,8 @@ void smt_initialize() {
  * ======================================================================================================================
  */
 void DoSoilReadings () {
-  if (ds_found[0] || ds_found[1]) {
+  // if (ds_found[0] || ds_found[1]) {
+  if (ds_found[0]) {
     digitalWrite(PROBES_POWER_PIN, HIGH);      // turn on power to 2n2222 / sensor
     delay(10);//wait 10 milliseconds
     

@@ -1,6 +1,6 @@
 /*
  * ======================================================================================================================
- *  CF.h - Configuration File - CONFIG.TXT
+ *  CF.h - Configuration File Definations
  * ======================================================================================================================
  */
 
@@ -62,14 +62,23 @@ obs_period=15
  *  Define Global Configuration File Variables
  * ======================================================================================================================
  */
-char *cf_aes_pkey=NULL;
-long cf_aes_myiv=0;
-int cf_lora_unitid=2;
-int cf_lora_gwid=1;
-int cf_lora_txpower=13;
-int cf_lora_freq=915;
-int cf_obs_period=15;
-int cf_rg1_enable=0;
-int cf_rg2_enable=0;
-int cf_ds_enable=0;
-int cf_ds_baseline=0;
+#define CF_NAME           "CONFIG.TXT"
+#define KEY_MAX_LENGTH    30                // Config File Key Length
+#define VALUE_MAX_LENGTH  30                // Config File Value Length
+#define LINE_MAX_LENGTH   VALUE_MAX_LENGTH+KEY_MAX_LENGTH+3   // =, CR, LF 
+
+// Extern variables
+extern char *cf_aes_pkey;
+extern long cf_aes_myiv;
+extern int cf_lora_unitid;
+extern int cf_lora_gwid;
+extern int cf_lora_txpower;
+extern int cf_lora_freq;
+extern int cf_obs_period;
+extern int cf_rg1_enable;
+extern int cf_rg2_enable;
+extern int cf_ds_enable;
+extern int cf_ds_baseline;
+
+// Function prototypes
+void SD_ReadConfigFile();

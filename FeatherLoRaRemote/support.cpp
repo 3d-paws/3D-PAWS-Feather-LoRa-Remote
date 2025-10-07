@@ -1,18 +1,38 @@
 /*
  * ======================================================================================================================
- *  SF.h - Support Functions
+ *  support.cpp - Support Functions
  * ======================================================================================================================
  */
+#include <Arduino.h>
+#include <Wire.h>
+#include <RTClib.h>
 
-// Prototyping functions to aviod compile function unknown issue.
-void Output(const char *str);
+#include "include/cf.h"
+#include "include/output.h"
+#include "include/sensors.h"
+#include "include/wrda.h"
+#include "include/time.h"
+#include "include/main.h"
+#include "include/support.h"
 
 /*
- * =======================================================================================================================
- *  Measuring Battery - SEE https://learn.adafruit.com/adafruit-feather-m0-radio-with-lora-radio-module/power-management
+ * ======================================================================================================================
+ * Variables and Data Structures
  * =======================================================================================================================
  */
-#define VBATPIN      A7
+int  LED_PIN = LED_BUILTIN;  // Built in LED
+const char* pinNames[] = {
+  "D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7",
+  "D8", "D9", "D10", "D11", "D12", "D13",
+  "A0", "A1", "A2", "A3", "A4", "A5"
+};
+char DeviceID[25];           // A generated ID based on board's 128-bit serial number converted down to 96bits
+
+/*
+ * ======================================================================================================================
+ * Fuction Definations
+ * =======================================================================================================================
+ */
 
 /*
  *=======================================================================================================================
@@ -81,8 +101,7 @@ bool I2C_Device_Exist(byte address) {
  * Blink() - Count, delay between, delay at end
  * ======================================================================================================================
  */
-void Blink(int count, int between)
-{
+void Blink(int count, int between) {
   int c;
 
   for (c=0; c<count; c++) {
@@ -98,8 +117,8 @@ void Blink(int count, int between)
  * FadeOn() - https://www.dfrobot.com/blog-596.html
  * ======================================================================================================================
  */
-void FadeOn(unsigned int time,int increament){
-  for (byte value = 0 ; value < 255; value+=increament){
+void FadeOn(unsigned int time,int increament) {
+  for (byte value = 0 ; value < 255; value+=increament) {
   analogWrite(LED_PIN, value);
   delay(time/(255/5));
   }
@@ -111,7 +130,7 @@ void FadeOn(unsigned int time,int increament){
  * ======================================================================================================================
  */
 void FadeOff(unsigned int time,int decreament){
-  for (byte value = 255; value >0; value-=decreament){
+  for (byte value = 255; value >0; value-=decreament) {
   analogWrite(LED_PIN, value);
   delay(time/(255/5));
   }
@@ -161,42 +180,6 @@ bool isnumeric(char *s) {
   return(true);
 }
 
-/*
- * ======================================================================================================================
- * JPO_ClearBits() - Clear System Status Bits related to initialization
- * ======================================================================================================================
- */
-void JPO_ClearBits() {
-  if (JustPoweredOn) {
-    JustPoweredOn = false;
-    SystemStatusBits &= ~SSB_PWRON;   // Turn Off Power On Bit
-    // SystemStatusBits &= ~SB_SD;    // Turn Off SD Missing Bit - Required keep On
-    // SystemStatusBits &= ~SSB_RTC;  // Turn Off RTC Missing Bit - Required keep On
-    SystemStatusBits &= ~SSB_EEPROM;  // Turn Off EEPROM Missing Bit
-    SystemStatusBits &= ~SSB_OLED;    // Turn Off OLED Missing Bit
-    SystemStatusBits &= ~SSB_LORA;    // Turn Off LoRa Missing Bit
-    SystemStatusBits &= ~SSB_BMX_1;   // Turn Off BMX_1 Not Found Bit
-    SystemStatusBits &= ~SSB_BMX_2;   // Turn Off BMX_2 Not Found Bit
-    SystemStatusBits &= ~SSB_HTU21DF; // Turn Off HTU Not Found Bit
-    SystemStatusBits &= ~SSB_MCP_1;   // Turn Off MCP_1 Not Found Bit
-    SystemStatusBits &= ~SSB_MCP_2;   // Turn Off MCP_2 Not Found Bit
-    SystemStatusBits &= ~SSB_MCP_3;   // Turn Off MCP_2 Not Found Bit
-    SystemStatusBits &= ~SSB_SHT_1;   // Turn Off SHT_1 Not Found Bit
-    SystemStatusBits &= ~SSB_SHT_2;   // Turn Off SHT_1 Not Found Bit
-    SystemStatusBits &= ~SSB_HIH8;    // Turn Off HIH Not Found Bit
-    SystemStatusBits &= ~SSB_VLX;     // Turn Off VEML7700 Not Found Bit
-    SystemStatusBits &= ~SSB_SI1145;  // Turn Off UV,IR, VIS Not Found Bit
-    SystemStatusBits &= ~SSB_PM25AQI; // Turn Off PM25AQI Not Found Bit
-    SystemStatusBits &= ~SSB_HDC_1;   // Turn Off HDC302x Not Found Bit
-    SystemStatusBits &= ~SSB_HDC_2;   // Turn Off HDC302x Not Found Bit
-    SystemStatusBits &= ~SSB_BLX;     // Turn Off BLUX30 Not Found Bit
-    SystemStatusBits &= ~SSB_LPS_1;   // Turn Off LPS35HW Not Found Bit
-    SystemStatusBits &= ~SSB_LPS_2;   // Turn Off LPS35HW Not Found Bit
-    SystemStatusBits &= ~SSB_TLW;     // Turn Off Tinovi Leaf Wetness Not Found Bit
-    SystemStatusBits &= ~SSB_TSM;     // Turn Off Tinovi Soil Moisture Not Found Bit
-    SystemStatusBits &= ~SSB_TMSM;    // Turn Off Tinovi MultiLevel Soil Moisture Not Found Bit
-  }
-}
 
 /*
  * ======================================================================================================================
@@ -248,4 +231,44 @@ void GetDeviceID() {
     sprintf (DeviceID+strlen(DeviceID), "%02x", compressedId[i]);
   }
   DeviceID[24] = '\0'; // Ensure null-termination
+}
+
+/* 
+ *=======================================================================================================================
+ * obs_interval_initialize() - observation interval 5,6,10,15,20,30
+ *=======================================================================================================================
+ */
+void obs_interval_initialize() {
+  if ((cf_obs_period != 5) && 
+      (cf_obs_period != 6) && 
+      (cf_obs_period != 10) &&
+      (cf_obs_period != 15) &&
+      (cf_obs_period != 20) &&
+      (cf_obs_period != 30)) {
+    sprintf (Buffer32Bytes, "OBS Interval:%dm Now:15m", cf_obs_period);
+    Output(Buffer32Bytes);
+    cf_obs_period = 15; 
+  }
+  else {
+    sprintf (Buffer32Bytes, "OBS Interval:%dm", cf_obs_period);
+    Output(Buffer32Bytes);    
+  }
+}
+
+/* 
+ *=======================================================================================================================
+ * seconds_to_next_obs() - This will return seconds to next observation
+ *=======================================================================================================================
+ */
+int seconds_to_next_obs() {
+  now = rtc.now(); //get the current date-time
+  int wd_sampletime = (cf_ds_enable || AS5600_exists | PM25AQI_exists) ? 60 : 0; // Lets start next obs 1 minute early if we have wind or distance
+
+  // seconds remain until the next period boundary
+  int stno = ( (cf_obs_period*60) - (now.unixtime() % (cf_obs_period*60)) ); // The mod operation gives us seconds passed last observation period 
+
+  if (stno > wd_sampletime ) {
+    stno = stno - wd_sampletime; // We want to start the observastion early to take wind, distance, air samples.
+  }
+  return (stno);
 }

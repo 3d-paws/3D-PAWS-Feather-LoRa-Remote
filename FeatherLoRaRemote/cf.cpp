@@ -1,121 +1,40 @@
 /*
  * ======================================================================================================================
- * SD.h - SD Card
+ *  cf.cpp - Configuration File Functions
  * ======================================================================================================================
  */
-#define SD_ChipSelect 10    // GPIO 10 is Pin 10 on Feather and D5 on Particle Boron Board
 
-#define CF_NAME           "CONFIG.TXT"
-#define KEY_MAX_LENGTH    30                // Config File Key Length
-#define VALUE_MAX_LENGTH  30                // Config File Value Length
-#define LINE_MAX_LENGTH   VALUE_MAX_LENGTH+KEY_MAX_LENGTH+3   // =, CR, LF 
+#include <Arduino.h>
+#include <SD.h>
 
-// SD;                      // File system object defined by the SD.h include file.
-File SD_fp;
-char SD_obsdir[] = "/OBS";  // Store our obs in this directory. At Power on, it is created if does not exist
-bool SD_exists = false;     // Set to true if SD card found at boot
+#include "include/ssbits.h"
+#include "include/output.h"
+#include "include/lora.h"
+#include "include/main.h"
+#include "include/cf.h"
 
-char SD_crt_file[] = "CRT.TXT";             // if file exists clear rain totals and delete file
-
-/* 
- *=======================================================================================================================
- * SD_initialize()
- *=======================================================================================================================
+/*
+ * ======================================================================================================================
+ * Variables and Data Structures
+ * =======================================================================================================================
  */
-void SD_initialize() {
-  if (!SD.begin(SD_ChipSelect)) {
-    Output ("SD:NF");
-    SystemStatusBits |= SSB_SD;
-    delay (5000);
-  }
-  else {
-    SD_exists = true;
-    if (!SD.exists(SD_obsdir)) {
-      if (SD.mkdir(SD_obsdir)) {
-        Output ("SD:MKDIR OBS OK");
-        Output ("SD:Online");
-        SD_exists = true;
-      }
-      else {
-        Output ("SD:MKDIR OBS ERR");
-        Output ("SD:Offline");
-        SystemStatusBits |= SSB_SD;  // Turn On Bit     
-      } 
-    }
-    else {
-      Output ("SD:Online");
-      Output ("SD:OBS DIR Exists");
-      SD_exists = true;
-    }
-  }
-}
+char *cf_aes_pkey=NULL;
+long cf_aes_myiv=0;
+int cf_lora_unitid=2;
+int cf_lora_gwid=1;
+int cf_lora_txpower=13;
+int cf_lora_freq=915;
+int cf_obs_period=15;
+int cf_rg1_enable=0;
+int cf_rg2_enable=0;
+int cf_ds_enable=0;
+int cf_ds_baseline=0;
 
-/* 
- *=======================================================================================================================
- * SD_LogObservation()
- *=======================================================================================================================
+/*
+ * ======================================================================================================================
+ * Fuction Definations
+ * =======================================================================================================================
  */
-void SD_LogObservation(char *observations) {
-  char SD_logfile[24];
-  File fp;
-
-  if (!SD_exists) {
-    return;
-  }
-
-  if (!RTC_valid) {
-    return;
-  }
-
-  // Disable LoRA SPI0 Chip Select
-  pinMode(LORA_SS, OUTPUT);
-  digitalWrite(LORA_SS, HIGH);
-
-  // Note: "now" is global and is set when ever timestampe() is called. Value last read from RTC.
-  sprintf (SD_logfile, "%s/%4d%02d%02d.log", SD_obsdir, now.year(), now.month(), now.day());
-  // Output (SD_logfile);
-  
-  fp = SD.open(SD_logfile, FILE_WRITE); 
-  if (fp) {
-    fp.println(observations);
-    fp.close();
-    SystemStatusBits &= ~SSB_SD;  // Turn Off Bit
-    Output ("OBS Logged to SD");
-  }
-  else {
-    SystemStatusBits |= SSB_SD;  // Turn On Bit - Note this will be reported on next observation
-    Output ("OBS Open Log Err");
-    // At thins point we could set SD_exists to false and/or set a status bit to report it
-    // SD_initialize();  // Reports SD NOT Found. Library bug with SD
-  }
-}
-
-/* 
- *=======================================================================================================================
- * SD_ClearRainTotals() -- If CRT.TXT exists on SD card clear rain totals - Checked at Boot
- *=======================================================================================================================
- */
-void SD_ClearRainTotals() {
-  if (RTC_valid && SD_exists) {
-    if (SD.exists(SD_crt_file)) {
-      if (SD.remove (SD_crt_file)) {
-        Output ("CRT:OK-CLR");
-        now = rtc.now();
-        EEPROM_ClearRainTotals(now.unixtime());
-        EEPROM_Dump();
-      }
-      else {
-        Output ("CRT:ERR-RM");
-      }
-    }
-    else {
-      Output ("CRT:OK-NF");
-    }
-  }
-  else {
-    Output ("CRT:ERR-CLK");
-  }
-}
 
 /* 
  * =======================================================================================================================
@@ -136,9 +55,7 @@ void SD_ClearRainTotals() {
 
 int SD_findKey(const __FlashStringHelper * key, char * value) {
   
-  // Disable LoRA SPI0 Chip Select
-  pinMode(LORA_SS, OUTPUT);
-  digitalWrite(LORA_SS, HIGH);
+  LoRaDisableSPI(); // Disable LoRA SPI0 Chip Select
   
   File configFile = SD.open(CF_NAME);
 
