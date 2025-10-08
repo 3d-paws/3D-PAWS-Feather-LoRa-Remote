@@ -3,6 +3,13 @@
  *  lora.cpp - LoRa Functions
  * ======================================================================================================================
  */
+
+/*
+  The recommended antenna wire lengths for Adafruit LoRa Feather boards are frequency-dependent quarter-wave whip antennas:
+    For 433 MHz, the antenna length should be 6.5 inches (16.5 cm).
+    For 868 MHz, the antenna length should be 3.25 inches (8.2 cm).
+    For 915 MHz, the antenna length should be 3 inches (7.8 cm).
+ */
  
 #include <RH_RF95.h>
 #include <AES.h>

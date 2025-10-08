@@ -13,56 +13,59 @@ Normally the unit is in low power sleep mode. If a rain tip occurs, we wake up i
 
 ### CONFIG.TXT example
 <div style="overflow:auto; white-space:pre; font-family: monospace; font-size: 8px; line-height: 1.5; height: 480px; border: 1px solid black; padding: 10px;">
-<pre>
+
+```
 #
 # CONFIG.TXT
 #
-# Line Length is limited to 63 characters
-\#12345678901234567890123456789012345678901234567890123456789012
 
-\# Private Key - 128 bits (16 bytes of ASCII characters)
+# Line Length is limited to 63 characters
+#12345678901234567890123456789012345678901234567890123456789012
+
+# Private Key - 128 bits (16 bytes of ASCII characters)
 aes_pkey=10FE2D3C4B5A6978
 
-\# Initialization Vector must be and always will be 128 bits (16 bytes.)
-\# The real iv is actually myiv repeated twice
-\# 1234567 -> 0x12D687 = 0x00 0x12 0xD6 0x87 0x00 0x12 0xD6 0x87
+# Initialization Vector must be and always will be 128 bits (16 bytes.)
+# The real iv is actually myiv repeated twice
+# 1234567 -> 0x12D687 = 0x00 0x12 0xD6 0x87 0x00 0x12 0xD6 0x87
 aes_myiv=1234567
 
-\# This unit's LoRa ID for Receiving and Sending Messages
-\# Also Chords Site instrument_id
+# This unit's LoRa ID for Receiving and Sending Messages
+# Also Chords Site instrument_id
 lora_unitid=2
 
-\# LoRa Address who we are sending to aka LoRa 3D-PAWS
+# LoRa Address who we are sending to aka LoRa 3D-PAWS
 lora_gwid=1
 
-\# You can set transmitter power from 5 to 23 dBm, default is 13
+# You can set transmitter power from 5 to 23 dBm, default is 13
 lora_txpower=23
 
-\# Valid entries are 433, 866, 915
+# Valid entries are 433, 866, 915
 lora_freq=915
 
-\# Wind is enabled on A2 if the software detects AS5600 at boot.
+# Wind is enabled on A2 if the software detects AS5600 at boot.
 
-\# Rain Gauge rg1 pin A3
-\# Options 0,1
+# Rain Gauge rg1 pin A3
+# Options 0,1
 rg1_enable=0
 
-\# Rain Gauge rg2 pin A4
-\# Options 0,1
+# Rain Gauge rg2 pin A4
+# Options 0,1
 rg2_enable=0
 
-\# Enable / Disable distance sensor (0/1)
-\# Distance Sensor for Snow, Surge, Stream on pin A5
-\# Options 0 = No sensor, 5 = 5M sendor, 10 = 10m sensor
+# Enable / Disable distance sensor (0/1)
+# Distance Sensor for Snow, Surge, Stream on pin A5
+# Options 0 = No sensor, 5 = 5M sendor, 10 = 10m sensor
 ds_enable=5
 
-\# Distance sensor baseline. If positive, distance = baseline - ds_median
+# Distance sensor baseline. If positive, distance = baseline - ds_median
 ds_baseline=0
 
-\# Valid Observation Period in minutes (5,6,10,15,20,30)
-\# 15 minute observation period is the default
+# Valid Observation Period in minutes (5,6,10,15,20,30)
+# 15 minute observation period is the default
 obs_period=15
-</pre>
+```
+
 </div>
 
 #### Things to Note
@@ -74,9 +77,11 @@ obs_period=15
 - At startup, INFO message is sent. These will be multiple LoRa messages. Do to message length constraint. INFO provides information on the station's configuration. File INFO.TXT on the SD card will be maintained with the most current information. Below is an example.
 
 <div style="overflow:auto; white-space:pre; font-family: monospace; font-size: 8px; line-height: 1.5; height: 100px; border: 1px solid black; padding: 10px;">
-<pre>
+
+```
 {"at":"2025-10-07T01:30:15","id":72,"devid":"330eff6367815b7d93bfbcec","mtype":"IF","ver":"FLoRaRemote-250925","bv":4.27,"hth":66026689,"obsi":"5m","obsti":"5m","t2nt":"225s","lora":"72,23,915MHz,OK""devs":"mux,sd","sensors":"PM25AQ(D5),RG1(A3),DIST 5M(A5),SM0(A0),ST0(A1)"}
-</pre>
+```
+
 </div>
 
 - The code is maintaining a special soil moinsture and temperatue solution using A0 for analog reading and A1 for a OneWire temperature sensor (SM0, ST0) tags.
@@ -86,7 +91,8 @@ obs_period=15
 ### Pin Mappings
 
 <div style="overflow:auto; white-space:pre; font-family: monospace; font-size: 8px; line-height: 1.5; height: 480px; border: 1px solid black; padding: 10px;">
-<pre>
+
+```
  Pin Definitions
 
  Board Label   Arduino  Info & Usage                   Grove Shield Connector   
@@ -124,7 +130,8 @@ obs_period=15
  D8 = LoRa NSS aka Chip Select CS
  D4 = LoRa Reset
  D3 = LoRa DIO
-</pre>
+```
+
 </div>
 
 ### LoRa Antenna Length

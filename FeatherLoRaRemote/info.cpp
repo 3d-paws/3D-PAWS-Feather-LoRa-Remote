@@ -57,7 +57,8 @@ void INFO_Do()
   const char *comma = "";
   int msgLength;
   unsigned short checksum;
-  float batt; 
+  float batt;
+  bool oktosend = false; 
 
   memset(header, 0, sizeof(header));
   memset(rest, 0, sizeof(rest));
@@ -75,7 +76,7 @@ void INFO_Do()
   sprintf (fullmsg, "{%s", header);
 
   sprintf (rest, ",\"ver\":\"%s\",\"bv\":%d.%02d,\"hth\":%d,",
-    VERSION_INFO, (int)batt, (int)(batt*100)%100, SystemStatusBits);
+    versioninfo, (int)batt, (int)(batt*100)%100, SystemStatusBits);
 
   sprintf (rest+strlen(rest), "\"obsi\":\"%dm\",\"obsti\":\"%dm\",\"t2nt\":\"%ds\",",
     cf_obs_period, cf_obs_period, seconds_to_next_obs());
@@ -317,17 +318,23 @@ void INFO_Do()
         }
       }
     }
-    Output("IFDO:SEND MUX SENSORS");
-    sprintf (loramsg, "{%s,\"sensors\":\"%s\"}", header, rest);
-    SendLoRaMessage(loramsg, "IF");
+    if (strlen(rest)) {
+      Output("IFDO:SEND MUX SENSORS");
+      // Grow our full message
+      sprintf (fullmsg+strlen(fullmsg), "%s%s\"", sensorcomma, rest);
+      Serial_writeln(fullmsg); 
+  
+      sprintf (loramsg, "{%s,\"sensors\":\"%s\"}", header, rest);
+      SendLoRaMessage(loramsg, "IF");
+    }
   }
 
   //================================
   // Put the parts together and send
   //================================
   
-  // Grow our full message
-  sprintf (fullmsg+strlen(fullmsg), "%s%s\"}", sensorcomma, rest);
+  // Adding closing }
+  sprintf (fullmsg+strlen(fullmsg), "}");
   Serial_writeln(fullmsg); 
 
   // Update INFO.TXT file

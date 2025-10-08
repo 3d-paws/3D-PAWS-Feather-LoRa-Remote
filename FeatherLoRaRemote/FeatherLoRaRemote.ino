@@ -1,4 +1,5 @@
 #define COPYRIGHT "Copyright [2025] [University Corporation for Atmospheric Research]"
+#define VERSION_INFO "FLoRaRemote-251008"
 /*
  *======================================================================================================================
  * FeatherLoRaRemote - 3D-PAWS-Feather-LoRaRemote
@@ -38,6 +39,7 @@
  *                          Added mux_deselect_all() and changed all mux_channel_set(0) to this
  *                          Added void LoRaDisableSPI() used in CF.cpp
  *                          Added LoRaSleep() use in loop()
+ *           2025-10-08 RJB Bug fixes on INFO messages.
  *           
  * Time Format: 2022:09:19:19:10:00  YYYY:MM:DD:HR:MN:SS
  * 
@@ -79,8 +81,6 @@
  *     >     #if (true || defined(__AVR__))
  *     41a42
  *     >  #define printf_P printf
- *
- * Library of Adafruit_BMP280_Library has been modified to enable Forced Mode
  *
  * ======================================================================================================================
  * Pin Definitions
@@ -180,6 +180,7 @@ char *msgp;                  // Pointer used all over the code
 char Buffer32Bytes[32];      // Buffer used all over the code
 int countdown = 300;         // Exit calibration mode when reaches 0 - protects against burnt out pin or forgotten jumper
 unsigned long nextinfo=0;    // Time of Next INFO transmit
+char versioninfo[sizeof(VERSION_INFO)];  // allocate enough space including null terminator
 
 
 void sleepinterrupt() {
@@ -204,7 +205,8 @@ void setup()
   delay(2000); // Prevents usb driver crash on startup
 
   Serial_write(COPYRIGHT);
-  Output (VERSION_INFO);
+  strcpy(versioninfo, VERSION_INFO);
+  Output (versioninfo);
 
   GetDeviceID();
   sprintf (msgbuf, "DevID:%s", DeviceID);
