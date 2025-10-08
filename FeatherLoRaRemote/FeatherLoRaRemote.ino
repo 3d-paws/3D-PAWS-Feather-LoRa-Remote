@@ -126,7 +126,7 @@
  * 
  * If a tip occurs we wake up increment the tip count in the interrupt handler.
  * Upon wake up the code starts executing after the function "LowPower.sleep(GoToSleepTime);" in the main loop.
- * The main loop determines if the full sleep period (15min) has transpired.
+ * The main loop determines if the full sleep period (5,6,10,15,20,30 min) has transpired.
  *   If so,  an observation is made and transmitted. After another 15min sleep period occurs.
  *   If not, It calculates the amount of time left in the 15 minute sleep period.
  *      If This amount of time is 2s or less before next observation,it delays and avoids the sleep.
