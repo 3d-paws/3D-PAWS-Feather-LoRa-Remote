@@ -4,7 +4,7 @@ Last Updated: 2025-10-08
 
 ## Description
 
-This software is supported on a Adafruit Feather LoRa board. It provides full weather station features. It uses LoRa (not LoRaWAN) to transmit observations to a receiving station for relay. Currently that is a Particle Full Station with Adafruit LoRa RFM95 module. Future plan is to also support a RaspberryPI as a receiver and relay. \
+This software is supported on a Adafruit Feather LoRa board. It provides full weather station features. It uses LoRa (not LoRaWAN) to transmit observations to a receiving station for relay. Currently that is a Particle Full Station with Adafruit LoRa RFM95 module. Future plan is to also support for a RaspberryPI as a receiver and relay. \
  \
 See [Particle Full Station Documentation](https://github.com/3d-paws/3D-PAWS-Particle-FullStation/blob/master/README.md) for features documented there and supported in this code.
 
