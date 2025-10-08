@@ -35,8 +35,8 @@
  *           2025-09-23 RJB Fixed checksum error on LoRa INFO messages
  *                          Added the chunking of the observers into multiple lora packets
  *           2025-10-05 RJB Code clean up, True .h files with corresponding.cpp files.          
- *                          added mux_deselect_all() and changed all mux_channel_set(0) to this
- *                          added void LoRaDisableSPI() used in CF.cpp
+ *                          Added mux_deselect_all() and changed all mux_channel_set(0) to this
+ *                          Added void LoRaDisableSPI() used in CF.cpp
  *                          Added LoRaSleep() use in loop()
  *           
  * Time Format: 2022:09:19:19:10:00  YYYY:MM:DD:HR:MN:SS
@@ -137,22 +137,10 @@
 
 /*
  * ======================================================================================================================
- * Adding SDBoot Support for UPDATE.BIN on SD card
- * 
- * No Change Needed ~/Library/Arduino15/packages/adafruit/hardware/samd/1.7.16/variants/feather_m0/linker_scripts/gcc
- * Replace Files in ~/Library/Arduino15/packages/adafruit/hardware/samd/1.7.16/libraries/SDU/extras/SDUBoot with
- *                 ~/Documents/Arduino/3D-PAWS/3D-PAWS-Feather-LoRa-Remote/SDUBoot/
- * Change directory to ~/Library/Arduino15/packages/adafruit/hardware/samd/1.7.16/libraries/SDU/extras/SDUBoot and run ./build.sh
- * Copy ~/Library/Arduino15/packages/adafruit/hardware/samd/1.7.16/libraries/SDU/src/boot/featherm0.h to
- *     ~/Documents/Arduino/3D-PAWS/3D-PAWS-Feather-LoRa-Remote/FeatherLoRaRemote/boot/
- * Uncomment below and compile
+ * Add SDBoot Support for UPDATE.BIN on SD card
  * ======================================================================================================================
  */
-// Below lines add SDUBoot support
-__attribute__ ((section(".sketch_boot")))
-unsigned char sduBoot[0x6000] = {
-    #include "boot/featherm0.h"
-};
+#include "boot/sdboot.h"
 
 /* 
  *=======================================================================================================================
@@ -329,7 +317,6 @@ void setup()
   wbt_initialize();
   hi_initialize();
   wbgt_initialize();
-
 
   lora_initialize();
 
