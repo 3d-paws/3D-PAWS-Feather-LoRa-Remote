@@ -18,7 +18,6 @@ Normally the unit is in low power sleep mode. If a rain tip occurs, we wake up i
 #
 # CONFIG.TXT
 #
-
 # Line Length is limited to 63 characters
 #12345678901234567890123456789012345678901234567890123456789012
 
@@ -27,7 +26,7 @@ aes_pkey=10FE2D3C4B5A6978
 
 # Initialization Vector must be and always will be 128 bits (16 bytes.)
 # The real iv is actually myiv repeated twice
-# 1234567 -> 0x12D687 = 0x00 0x12 0xD6 0x87 0x00 0x12 0xD6 0x87
+# 1234567 -> 0x12D687 = 0x00 0x12 0xD6 0x87 0x00 0x12 0xD6 0x87 
 aes_myiv=1234567
 
 # This unit's LoRa ID for Receiving and Sending Messages
@@ -43,23 +42,67 @@ lora_txpower=23
 # Valid entries are 433, 866, 915
 lora_freq=915
 
-# Wind is enabled on A2 if the software detects AS5600 at boot.
+#################################################
+# General Configurations Settings
+#################################################
+# No Wind Anemometer pin A2
+# 0 = wind data
+# 1 = no wind data
+nowind=0
 
 # Rain Gauge rg1 pin A3
 # Options 0,1
+# 0 = false
+# 1 = true
 rg1_enable=0
 
-# Rain Gauge rg2 pin A4
-# Options 0,1
-rg2_enable=0
+# OptionPin 1 - pin A4
+# 0 = No sensor
+# 1 = raw (op1r - average 5 samples spaced 10ms)
+# 2 = 2nd rain gauge (rg2)
+# 5 = 5m distance sensor (ds, dsr)
+# 10 = 10m distance sensor (ds, dsr)
+op1=0
 
-# Enable / Disable distance sensor (0/1)
-# Distance Sensor for Snow, Surge, Stream on pin A5
-# Options 0 = No sensor, 5 = 5M sendor, 10 = 10m sensor
-ds_enable=5
+# OptionPin 2 - pin A5
+# 0 = No sensor (Pin in use if pm25aqi air quality detected)
+# 1 = raw (op2r - average 5 samples spaced 10ms)
+# 2 = read Voltaic battery voltage (vbv)
+op2=0
+
+# OptionPin 3 - pin A0
+# 0 = No sensor
+# 1 = raw (op3r - average 5 samples spaced 10ms)
+
+# OptionPin 4 - pin A1
+# 0 = No sensor
+# 1 = raw (op4r - average 5 samples spaced 10ms)
 
 # Distance sensor baseline. If positive, distance = baseline - ds_median
 ds_baseline=0
+
+# elevation used for MSLP
+elevation=0
+
+# Rain Total Rollover Offset from 0 UTC
+# Set rtro to the UTC hour when your Rain Total Rollover action should occur.
+#
+# - Find your UTC offset (e.g., Denver MDT = -6, Kenya = +3)
+# - Calculate: RTRO = Local_Hour - UTC_Offset
+# - Use 0-23 range (if negative, add 24)
+#
+# Example: Set roll over to be at Midnight local time. 
+# - Denver midnight MDT: 0 - (-6) = 6 
+# - Kenya 6 AM:          6 - 3 = 3 
+# - Sydney 8 AM AEDT:    8 - 11 = -3 + 24 = 21 
+# - UTC midnight:        0 - 0 = 0
+#
+# rtro=H(:MM) - valid values are where H = (0-23) with optional ":" and MM = (00,15,30,45)
+rtro=0
+
+#################################################
+# System Timing
+#################################################
 
 # Valid Observation Period in minutes (5,6,10,15,20,30)
 # 15 minute observation period is the default
@@ -93,43 +136,44 @@ obs_period=15
 <div style="overflow:auto; white-space:pre; font-family: monospace; font-size: 8px; line-height: 1.5; height: 480px; border: 1px solid black; padding: 10px;">
 
 ```
- Pin Definitions
-
- Board Label   Arduino  Info & Usage                   Grove Shield Connector   
- RST
- 3V            3v3 Power
- ARef
- GND
- A0            A0       Soil Moisture Sensor 1         Grove A0
- A1            A1       Dallas Sensor 1wire 1          Grove A0
- A2            A2       Interrupt For Anemometer       Grove A2
- A3            A3       Interrupt For Rain Gauge 1     Grove A2
- A4            A4       Interrupt For Rain Gauge 2     Grove A4
- A5            A5       Distance Sensor                Grove A4
- SCK           SCK      SPI0 Clock - SD/LoRa           Not on Grove
- MOS           MOSI     Used by SD Card/LoRa           Not on Grove
- MIS           MISO     Used by SDCard/LoRa            Not on Grove
- RX0           D0                                      Grove UART
- TX1           D1                                      Grove UART 
- io1           DIO1     to D6 if LoRa WAN              Not on Grove (Particle Pin D9)
+ * Pin Definitions
+ * 
+ * Board Label   Arduino  Info & Usage                   Grove Shield Connector   
+ * ======================================================================================================================
+ * RST
+ * 3V            3v3 Power
+ * ARef
+ * GND
+ * A0            A0       Option Pin 3                   Grove A0
+ * A1            A1       Option Pin 4                   Grove A0
+ * A2            A2       Interrupt For Anemometer       Grove A2
+ * A3            A3       Interrupt For Rain Gauge 1     Grove A2
+ * A4            A4       Option Pin 1                   Grove A4
+ * A5            A5       Option Pin 2                   Grove A4
+ * SCK           SCK      SPI0 Clock - SD/LoRa           Not on Grove
+ * MOS           MOSI     Used by SD Card/LoRa           Not on Grove
+ * MIS           MISO     Used by SDCard/LoRa            Not on Grove
+ * RX0           D0                                      Grove UART
+ * TX1           D1                                      Grove UART 
+ * io1           DIO1     to D6 if LoRa WAN              Not on Grove (Particle Pin D9) !!!! Removed for LoRaRemote
    
- BAT           VBAT Power
- En            Control - Connect to ground to disable the 3.3v regulator
- USB           VBUS Power
- 13            D13      LED                            Not on Grove 
- 12            D12      Serial Console Enable          Not on Grove
- 11            D11      Enable Sensors 2n2222/2N3904   Not on Grove
- 10            D10      Used by SD Card as CS          Grove D4  (Particle Pin D5)
- 9             D9/A7    Voltage Battery Pin            Grove D4  (Particle Pin D4)
- 6             D6       to DIO1 if LoRa WAN            Grove D2  (Particle Pin D3)
- 5             D5       Air Quality SET Pin            Grove D2  (Particle Pin D2)
- SCL           D3       i2c Clock                      Grove I2C_1
- SDA           D2       i2c Data                       Grove I2C_1
-  
- Not exposed on headers
- D8 = LoRa NSS aka Chip Select CS
- D4 = LoRa Reset
- D3 = LoRa DIO
+ * BAT           VBAT Power
+ * En            Control - Connect to ground to disable the 3.3v regulator
+ * USB           VBUS Power
+ * 13            D13      LED                            Not on Grove 
+ * 12            D12      Serial Console Enable          Not on Grove
+ * 11            D11      Enable Sensors 2n2222/2N3904   Not on Grove
+ * 10            D10      Used by SD Card as CS          Grove D4  (Particle Pin D5)
+ * 9             D9/A7    Voltage Battery Pin            Grove D4  (Particle Pin D4)
+ * 6             D6       to DIO1 if LoRa WAN            Grove D2  (Particle Pin D3)
+ * 5             D5       GPS Wake Pin                   Grove D2  (Particle Pin D2)
+ * SCL           D3       i2c Clock                      Grove I2C_1
+ * SDA           D2       i2c Data                       Grove I2C_1
+ * 
+ * Not exposed on headers
+ * D8 = LoRa NSS aka Chip Select CS
+ * D4 = LoRa Reset
+ * D3 = LoRa DIO
 ```
 
 </div>
