@@ -3,6 +3,7 @@
  *  obs.h - Observation Definations
  * ====================================================================================================================== 
  */
+#include <time.h>  // defines time_t
 
 #define OBSERVATION_INTERVAL 60   // Seconds
 #define MAX_SENSORS          64
@@ -33,6 +34,7 @@ typedef struct {
 
 // Extern variables
 extern OBSERVATION_STR obs;
+extern float bmx_1_pressure;
 
 // Function prototypes
 void OBS_Clear();

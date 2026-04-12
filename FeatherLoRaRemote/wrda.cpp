@@ -7,6 +7,7 @@
 #include <Wire.h>
 #include <ArduinoLowPower.h>
 
+#include "include/qc.h"
 #include "include/ssbits.h"
 #include "include/mux.h"
 #include "include/sensors.h"
@@ -21,32 +22,19 @@
  * Variables and Data Structures
  * =======================================================================================================================
  */
-/*
- * ======================================================================================================================
- *  Rain Gauge 1 - Optipolar Hall Effect Sensor SS451A
- * ======================================================================================================================
- */
-volatile unsigned int raingauge1_interrupt_count=0;
-uint64_t raingauge1_interrupt_stime; // Send Time
-uint64_t raingauge1_interrupt_ltime; // Last Time
-uint64_t raingauge1_interrupt_toi;   // Time of Interrupt
 
-/*
+ /*
  * ======================================================================================================================
- *  Rain Gauge 2 - Optipolar Hall Effect Sensor SS451A
+ *  Wind
  * ======================================================================================================================
  */
-volatile unsigned int raingauge2_interrupt_count=0;
-uint64_t raingauge2_interrupt_stime; // Send Time
-uint64_t raingauge2_interrupt_ltime; // Last Time
-uint64_t raingauge2_interrupt_toi;   // Time of Interrupt
+WIND_STR wind;
 
 /*
  * ======================================================================================================================
  *  Wind Direction - AS5600 Sensor
  * ======================================================================================================================
  */
-WIND_STR wind;
 bool      AS5600_exists     = false;
 int       AS5600_ADR        = 0x36;
 const int AS5600_raw_ang_hi = 0x0c;
@@ -66,7 +54,28 @@ float ws_radius = 0.079;           // In meters
  * ======================================================================================================================
  */
 volatile unsigned int anemometer_interrupt_count;
-uint64_t anemometer_interrupt_stime;
+unsigned long anemometer_interrupt_stime;
+
+/*
+ * ======================================================================================================================
+ *  Rain Gauge 1 - Optipolar Hall Effect Sensor SS451A
+ * ======================================================================================================================
+ */
+volatile unsigned int raingauge1_interrupt_count=0;
+unsigned long raingauge1_interrupt_stime; // Send Time
+volatile unsigned long raingauge1_interrupt_ltime; // Last Time
+unsigned long raingauge1_interrupt_toi;   // Time of Interrupt
+
+/*
+ * ======================================================================================================================
+ *  Rain Gauge 2 - Optipolar Hall Effect Sensor SS451A
+ * ======================================================================================================================
+ */
+volatile unsigned int raingauge2_interrupt_count=0;
+unsigned long raingauge2_interrupt_stime; // Send Time
+volatile unsigned long raingauge2_interrupt_ltime; // Last Time
+unsigned long raingauge2_interrupt_toi;   // Time of Interrupt
+
 
 /*
  * =======================================================================================================================
@@ -98,15 +107,50 @@ unsigned int dg_buckets[DG_BUCKETS];
 
 /*
  * ======================================================================================================================
+ *  anemometer_interrupt_handler() - This function is called whenever a magnet/interrupt is detected by the arduino
+ * ======================================================================================================================
+ */
+void anemometer_interrupt_handler()
+{
+  anemometer_interrupt_count++;
+}
+
+/*
+ * ======================================================================================================================
  *  raingauge1_interrupt_handler() - This function is called whenever a magnet/interrupt is detected by the arduino
  * ======================================================================================================================
  */
 void raingauge1_interrupt_handler()
 {
-  if ((millis() - raingauge1_interrupt_ltime) > 500) { // Count tip if a half second has gone by since last interrupt
-    raingauge1_interrupt_ltime = millis();
+  unsigned long now = millis();
+  if ((now - raingauge1_interrupt_ltime) > 500) { // Count tip if a half second has gone by since last interrupt
+    raingauge1_interrupt_ltime = now;
     raingauge1_interrupt_count++;
-  }   
+  }
+}
+
+/*
+ * ======================================================================================================================
+ *  raingauge1_sample() - return rain amount since last sample
+ * ======================================================================================================================
+ */
+float raingauge1_sample() {
+  unsigned long time_ms, rg1ds, count;
+  float rg1;
+
+  noInterrupts();
+  time_ms = millis();
+  rg1ds = (time_ms - raingauge1_interrupt_stime) / 1000;
+  count = raingauge1_interrupt_count;
+  raingauge1_interrupt_count = 0;
+  raingauge1_interrupt_stime = time_ms;
+  raingauge1_interrupt_ltime = 0;
+  interrupts();
+
+  rg1 = count * 0.2f;
+  rg1 = (isnan(rg1) || (rg1 < QC_MIN_RG) || (rg1 > (((float)rg1ds / 60.0f) * QC_MAX_RG))) ? QC_ERR_RG : rg1;
+
+  return rg1;
 }
 
 /*
@@ -116,21 +160,49 @@ void raingauge1_interrupt_handler()
  */
 void raingauge2_interrupt_handler()
 {
-  if ((millis() - raingauge2_interrupt_ltime) > 500) { // Count tip if a half second has gone by since last interrupt
-    raingauge2_interrupt_ltime = millis();
+  unsigned long now = millis();
+  if ((now - raingauge2_interrupt_ltime) > 500) { // Count tip if a half second has gone by since last interrupt
+    raingauge2_interrupt_ltime = now;
     raingauge2_interrupt_count++;
-  }   
+  }
 }
-
 
 /*
  * ======================================================================================================================
- *  anemometer_interrupt_handler() - This function is called whenever a magnet/interrupt is detected by the arduino
+ *  raingauge2_sample() - return rain amount since last sample
  * ======================================================================================================================
  */
-void anemometer_interrupt_handler()
-{
-  anemometer_interrupt_count++;
+float raingauge2_sample() {
+  unsigned long time_ms, rg2ds, count;
+  float rg2;
+
+  noInterrupts();
+  time_ms = millis();
+  rg2ds = (time_ms - raingauge2_interrupt_stime) / 1000;
+  count = raingauge2_interrupt_count;
+  raingauge2_interrupt_count = 0;
+  raingauge2_interrupt_stime = time_ms;
+  raingauge2_interrupt_ltime = 0;
+  interrupts();
+
+  rg2 = count * 0.2f;
+  rg2 = (isnan(rg2) || (rg2 < QC_MIN_RG) || (rg2 > (((float)rg2ds / 60.0f) * QC_MAX_RG))) ? QC_ERR_RG : rg2;
+
+  return rg2;
+}
+
+/* 
+ * =======================================================================================================================
+ * RainEnabled()
+ * =======================================================================================================================
+ */
+bool RainEnabled() {
+  if (cf_rg1_enable || (cf_op1 == OP1_STATE_RAIN)) {
+    return (true);
+  }
+  else {
+    return (false);
+  }
 }
 
 /* 
@@ -143,31 +215,28 @@ void anemometer_interrupt_handler()
  *=======================================================================================================================
  */
 float Wind_SampleSpeed() {
-  unsigned long delta_ms, time_ms;
+  unsigned long time_ms, delta_ms, count;
   float wind_speed;
-  
-  time_ms = millis();
 
-  // Handle the clock rollover after about 50 days.
-  if (time_ms < anemometer_interrupt_stime) {
-    delta_ms = (0xFFFFFFFF - anemometer_interrupt_stime) + time_ms;
-  }
-  else {
-    delta_ms = millis()-anemometer_interrupt_stime;
-  }
-  
-  if (anemometer_interrupt_count && (delta_ms>0)) {
-    wind_speed = ( ( anemometer_interrupt_count * 3.14156 * ws_radius)  / 
-      (float)( (float)delta_ms / 1000) )  * ws_calibration;
-  }
-  else {
-    wind_speed = 0.0;
-  }
-
+  noInterrupts();
+  count = anemometer_interrupt_count;
   anemometer_interrupt_count = 0;
-  anemometer_interrupt_stime = millis(); 
-  return (wind_speed);
-} 
+  time_ms = millis();
+  anemometer_interrupt_stime = time_ms;
+  interrupts();
+
+  // Unsigned subtraction naturally wraps on rollover, so if time_ms has rolled past zero and anemometer_interrupt_stime 
+  // is still the old large value, the subtraction still produces the correct elapsed time.
+  delta_ms = time_ms - anemometer_interrupt_stime;
+
+  if (count && delta_ms > 0) {
+    wind_speed = ((count * 3.14156f * ws_radius) / ((float)delta_ms / 1000.0f)) * ws_calibration;
+  } else {
+    wind_speed = 0.0f;
+  }
+
+  return wind_speed;
+}
 
 /* 
  *=======================================================================================================================
@@ -205,7 +274,6 @@ int Wind_SampleDirection() {
         Output ("WD Online");
       }
       AS5600_exists = true;           // We made it 
-      SystemStatusBits &= ~SSB_AS5600; // Turn Off Bit
       
       AS5600_hi_raw = AS5600_hi_raw << 8; //shift raw angle hi 8 left
       AS5600_hi_raw = AS5600_hi_raw | AS5600_lo_raw; //AND high and low raw angle value
@@ -220,7 +288,6 @@ int Wind_SampleDirection() {
       }
     }
   }
-  SystemStatusBits |= SSB_AS5600;  // Turn On Bit
   return (-1); // Not the best value to return 
 }
 
@@ -391,15 +458,6 @@ void Wind_GustUpdate() {
 
 /*
  * ======================================================================================================================
- * Wind_ClearSampleCount()    
- * ======================================================================================================================
- */
-void Wind_ClearSampleCount() {
-  wind.sample_count = 0;
-}
-
-/*
- * ======================================================================================================================
  * Wind_TakeReading() - Wind direction and speed, measure every second             
  * ======================================================================================================================
  */
@@ -407,7 +465,6 @@ void Wind_TakeReading() {
   wind.bucket[wind.bucket_idx].direction = (int) Wind_SampleDirection();
   wind.bucket[wind.bucket_idx].speed = Wind_SampleSpeed();
   wind.bucket_idx = (wind.bucket_idx+1) % WIND_READINGS; // Advance bucket index for next reading
-  wind.sample_count++;
 }
 
 /* 
@@ -421,7 +478,6 @@ void as5600_initialize() {
   if (Wire.endTransmission()) {
     msgp = (char *) "WD:NF";
     AS5600_exists = false;
-    SystemStatusBits |= SSB_AS5600;  // Turn On Bit
   }
   else {
     msgp = (char *) "WD:OK";
@@ -430,56 +486,96 @@ void as5600_initialize() {
   Output (msgp);
 }
 
+/* 
+ *=======================================================================================================================
+ * Pin_ReadAvg()
+ *=======================================================================================================================
+ */
+float Pin_ReadAvg(int pin) {
+  int numReadings = 5;
+  int totalValue = 0;
+  for (int i = 0; i < numReadings; i++) {
+    totalValue += analogRead(pin);
+    delay(10);  // Short delay between readings
+  }
+  return(totalValue / numReadings);
+}
+
+/* 
+ *=======================================================================================================================
+ * VoltaicVoltage() - Breakout the Voltaic Cell Voltage from the UCB-C 
+ * 
+ * Analog A0-A6	0-3.6V	ADC input range
+ * 
+ * Info: https://blog.voltaicsystems.com/reading-charge-level-of-voltaic-usb-battery-packs/ for  D+ 
+ * Info: https://blog.voltaicsystems.com/updated-usb-c-pd-and-always-on-for-v25-v50-v75-batteries/ for SBU
+ * 
+ * Newer V25/V50/V75 firmware (post-2023) moved this cell voltage signal to SBU pins (A8/B8) on USB-C for better USB 
+ * compliance. Older units used D+. Which conflicted with data transfer. 
+ * 
+ * Using both A8/B8 SBU pins ensures compatibility regardless of USB-C cable orientation (flipped or not)
+ * 
+ * Voltaic’s docs say the pack reports half the cell voltage.
+ * The expected voltage range on Voltaic V25's monitor pins (D+ on older firmware, 
+ *   SBU1 (A8) and SBU2 (B8) on newer) is 1.6V to 2.1V
+ *=======================================================================================================================
+ */
+float VoltaicVoltage(int pin) {
+  int numReadings = 5;
+  int totalValue = 0;
+  for (int i = 0; i < numReadings; i++) {
+    totalValue += analogRead(pin);
+    delay(10);  // Short delay between readings
+  }
+  float voltage = (3.3 * (totalValue / (float)numReadings)) / 4095.0; 
+  return(voltage);
+}
+
+/*
+ *=======================================================================================================================
+ * VoltaicVoltage() - Voltaic Cell Percent Charge 
+ *   Full charge: 4.2V cell → 2.1V on SBU (100%)  
+ *   75% charge:  ~3.9V cell → ~1.95V on SBU  
+ *   50% charge:  ~3.7V cell → ~1.85V on SBU  
+ *   25% charge:  ~3.4V cell → ~1.7V on SBU  
+ *   Empty:       3.2V cell → 1.6V on SBU (0%)
+ *=======================================================================================================================
+ */
+float VoltaicPercent(float half_cell_voltage) {
+  float cellV = half_cell_voltage * 2.0;
+  
+  if (cellV >= 4.20) return 100.0;
+  if (cellV <= 3.20) return 0.0;
+  
+  // Simple linear approximation over Voltaic's specified 3.2-4.2V range
+  // (Li-ion curve is flat in middle, so voltage alone is rough anyway)
+  float percent = ((cellV - 3.20) / (4.20 - 3.20)) * 100.0;
+  return constrain(percent, 0, 100);
+}
+
 /*
  * ======================================================================================================================
- * DistanceGauge_TakeReading - measure every second             
+ * DS_TakeReading() - measure every second             
  * ======================================================================================================================
  */
-void DistanceGauge_TakeReading() {
+void DS_TakeReading() {
   dg_buckets[dg_bucket] = (int) analogRead(DISTANCE_GAUGE_PIN) * dg_resolution_adjust;
   dg_bucket = (++dg_bucket) % DG_BUCKETS; // Advance bucket index for next reading
 }
 
 /* 
  *=======================================================================================================================
- * DG_Initialize() - Distance Sensor
+ * DS_Median()
  *=======================================================================================================================
  */
-void DS_Initialize() {
-  Output ("DS:INIT");
-  if (cf_ds_enable) {
-    if (cf_ds_enable == 5) {
-      dg_resolution_adjust = 5;
-      Output ("DIST=5M");
-    }
-    else if (cf_ds_enable == 10) {
-      dg_resolution_adjust = 10;
-      Output ("DIST=10M");
-    }
-    else {
-      Output ("DS:Config Invalid");
-      cf_ds_enable = 0;
-    }
-  }
-  else {
-    Output ("DS:Not Configured");
-  }
-}
-
-/* 
- *=======================================================================================================================
- * DistanceGauge_Median()
- *=======================================================================================================================
- */
-float DistanceGauge_Median() {
+float DS_Median() {
   int i;
   
   mysort(dg_buckets, DG_BUCKETS);
   i = (DG_BUCKETS+1) / 2 - 1; // -1 as array indexing in C starts from 0
-
-  return (dg_buckets[i]);
+  
+  return (dg_buckets[i]); 
 }
-
 
 /* 
  *=======================================================================================================================
@@ -487,7 +583,7 @@ float DistanceGauge_Median() {
  *=======================================================================================================================
  */
 void Do_WRDA_Samples() {
-  if (cf_ds_enable || AS5600_exists || PM25AQI_exists) {
+  if (!cf_nowind || PM25AQI_exists || (cf_op1 == OP1_STATE_DIST_5M) || (cf_op1 == OP1_STATE_DIST_10M)) {
     Output ("WRDA_Sample()");
 
     if (PM25AQI_exists) {
@@ -499,27 +595,26 @@ void Do_WRDA_Samples() {
       pm25aqi_clear();
     }
 
-    if (AS5600_exists) {
-      // Clear windspeed counter  
-      anemometer_interrupt_count = 0;
-      anemometer_interrupt_stime = millis();
-  
+    if (!cf_nowind) {
       // Init default values.
       wind.gust = 0.0;
       wind.gust_direction = -1;
       wind.bucket_idx = 0;
+      // Clear windspeed interrupt count by reading and tossing
+      Wind_SampleSpeed(); 
     }
 
     // Take 60 1s samples of wind speed and direction and fill arrays with values.
     Output("SAMPLING");
-//int c=200;
     for (int i=0; i< 60; i++) {
-      if (AS5600_exists) {
+      if (!cf_nowind) {
         Wind_TakeReading();
       }
-      if (cf_ds_enable) {
-        DistanceGauge_TakeReading();
+
+      if ((cf_op1 == OP1_STATE_DIST_5M) || (cf_op1 == OP1_STATE_DIST_10M)) {
+        DS_TakeReading();
       }
+
       if (PM25AQI_exists) {
         PM25_AQI_Data aqid;
         
@@ -574,6 +669,7 @@ void Do_WRDA_Samples() {
       OLED_spin();
       delay (1000);
     }
+
     if (SerialConsoleEnabled) Serial.println();  // Send a newline out to cleanup after all the periods we have been logging
     
     if (PM25AQI_exists) {
@@ -600,7 +696,7 @@ void Do_WRDA_Samples() {
       }      
     }
 
-    if (AS5600_exists) {
+    if (!cf_nowind) {
       Wind_GustUpdate(); // Update Gust and Gust Direction readings
     }
   }

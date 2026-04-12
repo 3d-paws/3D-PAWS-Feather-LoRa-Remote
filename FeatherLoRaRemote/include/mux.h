@@ -3,6 +3,7 @@
  *  mux.h - PCA9548 I2C MUX Defincations
  * ======================================================================================================================
  */
+#include <Arduino.h>
 
 /*
  * ======================================================================================================================
@@ -38,7 +39,6 @@ typedef struct {
 } MULTIPLEXER_STR;
 
 // Extern variables
-extern const char *sensor_state[];
 extern bool MUX_exists;
 extern MULTIPLEXER_STR mux[MUX_CHANNELS];
 extern MULTIPLEXER_STR *mc;

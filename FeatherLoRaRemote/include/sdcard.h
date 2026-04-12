@@ -3,6 +3,9 @@
  *  sdcard.h - SD Card Definations
  * ======================================================================================================================
  */
+#include <Arduino.h>
+#include <SD.h>
+
 #define SD_ChipSelect 10    // GPIO 10 is Pin 10 on Feather and D5 on Particle Boron Board
 
 // Extern variables

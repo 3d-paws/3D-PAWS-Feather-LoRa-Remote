@@ -19,7 +19,6 @@
  * Variables and Data Structures
  * =======================================================================================================================
  */
-const char *sensor_state[] = {"OFFLINE", "ONLINE"};
 bool MUX_exists = false;
 MULTIPLEXER_STR mux[MUX_CHANNELS];
 MULTIPLEXER_STR *mc;
@@ -147,13 +146,13 @@ void mux_obs_do(int &sidx) {
 void mux_scan() {
   if (MUX_exists) {
     Output("MUX:SCAN");
+    
+    int tsm_id = 0; // Test for Tinovi Soil Moisture sensor
     for (int c=0; c<MUX_CHANNELS; c++) {
       mux_channel_set(c);
       int s = 0;
 
       // Test for Tinovi Soil Moisture sensor
-      int tsm_id = 0;
-
       if (I2C_Device_Exist(TSM_ADDRESS)) {
         tsm.init(TSM_ADDRESS);
         mux[c].inuse = true;

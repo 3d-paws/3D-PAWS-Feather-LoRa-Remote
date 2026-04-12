@@ -31,6 +31,7 @@ unsigned long EEPROM_ChecksumCompute();
 void EEPROM_ChecksumUpdate();
 bool EEPROM_ChecksumValid();
 void EEPROM_ClearRainTotals(uint32_t current_time);
+bool EEPROM_TimeToRollOver();
 void EEPROM_Validate();
 void EEPROM_UpdateRainTotals(float rgt1, float rgt2);
 void EEPROM_SaveUnreportedRain();

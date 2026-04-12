@@ -11,7 +11,6 @@
 #include <Adafruit_MCP9808.h>
 #include <Adafruit_SI1145.h>
 #include <Adafruit_SHT31.h>
-#include <Adafruit_VEML7700.h>
 #include <Adafruit_PM25AQI.h>
 #include <Adafruit_HDC302x.h>
 #include <Adafruit_LPS35HW.h>
@@ -71,7 +70,7 @@ extern const char *bmxtype[];
 
 /*
  * ======================================================================================================================
- *  HTU21D-F - I2C - Humidity & Temp Sensor
+ *  HTU21D-F - I2C - Humidity & Temp Sensor  I2C 0x40
  * ======================================================================================================================
  */
 extern Adafruit_HTU21DF htu;
@@ -104,19 +103,6 @@ extern bool MCP_4_exists;
 
 /*
  * ======================================================================================================================
- *  SHTX - I2C - Temperature & Humidity sensor (SHT31)  - Note the SHT40, SHT45 use same i2c address
- * ======================================================================================================================
- */
-#define SHT_ADDRESS_1     0x44
-#define SHT_ADDRESS_2     0x45        // ADR pin set high, VDD
-
-extern Adafruit_SHT31 sht1;
-extern Adafruit_SHT31 sht2;
-extern bool SHT_1_exists;
-extern bool SHT_2_exists;
-
-/*
- * ======================================================================================================================
  *  HIH8 - I2C - Temperature & Humidity sensor (HIH8000)  - 
  * ======================================================================================================================
  */
@@ -144,6 +130,13 @@ extern bool HI_exists;
  */
 extern bool WBGT_exists;
 
+/* 
+ *=======================================================================================================================
+ * MSLP - Mean sea level pressure 
+ *=======================================================================================================================
+ */
+extern bool MSLP_exists;
+
 /*
  * ======================================================================================================================
  *  Si1145 - I2C - UV/IR/Visible Light Sensor
@@ -156,14 +149,6 @@ extern float si_last_vis;
 extern float si_last_ir;
 extern float si_last_uv;
 
-/*
- * ======================================================================================================================
- *  VEML7700 - I2C - Lux Sensor
- * ======================================================================================================================
- */
-#define VEML7700_ADDRESS   0x10
-extern Adafruit_VEML7700 veml;
-extern bool VEML7700_exists;
 
 /*
  * ======================================================================================================================
@@ -227,22 +212,6 @@ extern PM25AQI_OBS_STR pm25aqi_obs;
 extern Adafruit_PM25AQI pmaq;
 extern bool PM25AQI_exists;
 
-/*
- * ======================================================================================================================
- *  HDC302x - I2C - Precision Temperature & Humidity Sensor
- *    Note HDC uses the same I2C Address as SHT. To avoid conflict we are using 0x46 as hdc1 and 0x47 and hdc2 
- *    manufacturerID = 0x3000  -- uint16_t Adafruit_HDC302x::readManufacturerID()
- * ======================================================================================================================
- */
-#define HDC_ADDRESS_1     0x46        // A1=1, A0=0  Need to solder jumper
-#define HDC_ADDRESS_2     0x47        // A1=1, A0=1  Need to solder jumper
-#define HDC_ADDRESS_3     0x44        // A1=0, A0=0  Not used, Default setting from vendor
-#define HDC_ADDRESS_4     0x45        // A1=0, A0=1  Not used
-
-extern Adafruit_HDC302x hdc1;
-extern Adafruit_HDC302x hdc2;
-extern bool HDC_1_exists;
-extern bool HDC_2_exists;
 
 /*
  * ======================================================================================================================
@@ -297,10 +266,11 @@ extern bool TMSM_exists;
  * ======================================================================================================================
  */
 byte get_Bosch_ChipID (byte address);
+void bmx1_read(float &p, float &t, float &h);
+void bmx2_read(float &p, float &t, float &h);
 void bmx_initialize();
 void htu21d_initialize();
 void mcp9808_initialize();
-void sht_initialize();
 void hih8_initialize();
 bool hih8_getTempHumid(float *t, float *h);
 void wbt_initialize();
@@ -310,16 +280,14 @@ float hi_calculate(float T, float RH);
 void wbgt_initialize();
 double wbgt_using_hi(double HIc);
 double wbgt_using_wbt(double Ta, double Tg, double Tw);
+void mslp_initialize();
+double mslp_calculate(float Ts, float RH, float ps, int station_height);
 void si1145_initialize();
-void vlx_initialize();
-bool blx_getconfig();
+// bool blx_getconfig();
 void blx_initialize();
 float blx_takereading();
 void pm25aqi_clear();
 void pm25aqi_initialize();
-void hdc_initialize();
 void lps_initialize();
 void tlw_initialize();
 void tsm_initialize();
-void tmsm_initialize();
-void I2C_Check_Sensors();

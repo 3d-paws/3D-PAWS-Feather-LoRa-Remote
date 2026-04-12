@@ -4,7 +4,6 @@
  * ======================================================================================================================
  */
 #include <Arduino.h>
-
 #include "include/ssbits.h"
 #include "include/support.h"
 #include "include/main.h"
@@ -207,6 +206,53 @@ void OLED_write(const char *str) {
 
 /*
  * ======================================================================================================================
+ * OLED_write()  - Handle flash string
+ * ======================================================================================================================
+ */
+void OLED_write(const __FlashStringHelper *str) {
+  int c, len, bottom_line = 3;
+  
+  if (DisplayEnabled) {
+    // move lines up
+    for (c=0; c<=21; c++) {
+      oled_lines [0][c] = oled_lines [1][c];
+      oled_lines [1][c] = oled_lines [2][c];
+      oled_lines [2][c] = oled_lines [3][c];
+      if (OLED64) {
+        oled_lines [3][c] = oled_lines [4][c];
+        oled_lines [4][c] = oled_lines [5][c];
+        oled_lines [5][c] = oled_lines [6][c];  
+        oled_lines [6][c] = oled_lines [7][c];  
+        bottom_line = 7;          
+      }
+    }
+
+    memset(msgbuf, 0, sizeof(msgbuf));
+
+    // strncpy_P to safely copy the flash string (str) into a RAM buffer (msgbuf)
+    strncpy_P(msgbuf, (const char*)str, sizeof(msgbuf) - 1);
+    
+    // check length on new output line string
+    len = strlen (msgbuf);
+    if (len>21) {
+      len = 21;
+    }
+    for (c=0; c<=len; c++) {
+      oled_lines [bottom_line][c] = *(msgbuf+c);
+    }
+
+    // Adding Padding
+    for (;c<=21; c++) {
+      oled_lines [bottom_line][c] = ' ';
+    }
+    oled_lines [bottom_line][22] = (char) NULL;
+    
+    OLED_update();
+  }
+}
+
+/*
+ * ======================================================================================================================
  * OLED_write_noscroll() -- keep lines 1-3 and output on line 4
  * ======================================================================================================================
  */
@@ -270,7 +316,6 @@ void OLED_initialize() {
     }
     else {
       DisplayEnabled = false;
-      SystemStatusBits |= SSB_OLED; // Turn on Bit
     }
   }
 }
@@ -292,6 +337,18 @@ void Serial_write(const char *str) {
  * ======================================================================================================================
  */
 void Serial_writeln(const char *str) {
+  if (SerialConsoleEnabled) {
+    Serial.println(str);
+    Serial.flush();
+  }
+}
+
+/*
+ * ======================================================================================================================
+ * Serial_writeln() - Handel flash string
+ * ======================================================================================================================
+ */
+void Serial_writeln(const __FlashStringHelper *str) {
   if (SerialConsoleEnabled) {
     Serial.println(str);
     Serial.flush();
@@ -346,6 +403,16 @@ void Serial_Initialize() {
 void Output(const char *str) {
   OLED_write(str);
   Serial_write(str);
+}
+
+/*
+ * ======================================================================================================================
+ * Output()
+ * ======================================================================================================================
+ */
+void Output(const __FlashStringHelper *str) {
+  OLED_write(str);
+  Serial_writeln(str);
 }
 
 /*

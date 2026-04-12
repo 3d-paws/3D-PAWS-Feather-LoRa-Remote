@@ -15,7 +15,7 @@ extern unsigned int SendMsgCount;
 // Function prototypes
 void LoRaDisableSPI();
 void LoRaSleep();
-void SendAESLoraWanMsg (int bits,char *msg, int msgLength);
+void SendLoraAESMsg (int bits,char *msg, int msgLength);
 void SendLoRaMessage(char *ops, const char *mtype);
 bool lora_cf_validate();
 void lora_initialize();

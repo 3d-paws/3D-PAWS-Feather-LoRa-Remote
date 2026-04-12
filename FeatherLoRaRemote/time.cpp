@@ -3,11 +3,10 @@
  *  time.cpp - Time Management Fuctions
  * ====================================================================================================================== 
  */
-#include <RTClib.h>
-
 #include "include/ssbits.h"
 #include "include/output.h"
 #include "include/support.h"
+#include "include/gps.h"
 #include "include/main.h"
 #include "include/time.h"
 
@@ -31,6 +30,16 @@ bool RTC_exists = false;
 
 /* 
  *=======================================================================================================================
+ * rtc_unixtime() - 
+ *=======================================================================================================================
+ */
+uint32_t rtc_unixtime() {
+  now = rtc.now();
+  return (now.unixtime());
+}
+
+/* 
+ *=======================================================================================================================
  * rtc_timestamp() - Read from RTC and set timestamp string
  *=======================================================================================================================
  */
@@ -41,6 +50,15 @@ void rtc_timestamp() {
   sprintf (timestamp, "%d-%02d-%02dT%02d:%02d:%02d", 
     now.year(), now.month(), now.day(),
     now.hour(), now.minute(), now.second());
+}
+
+/* 
+ *=======================================================================================================================
+ * rtc_refresh() - Get time from WiFi network or GPS and refresh the RTC, return true if time aquired
+ *=======================================================================================================================
+ */
+bool rtc_refresh() {
+  return (gps_aquire());  // Our only time source
 }
 
 /* 
@@ -65,18 +83,22 @@ void rtc_initialize() {
 
   RTC_exists = true; // We have a clock hardware connected
 
-  rtc_timestamp();
-  sprintf (msgbuf, "%s*", timestamp);
+  rtc_timestamp(); // The call sets the "now" variable
+  sprintf (msgbuf, "%sR", timestamp);
   Output (msgbuf);
 
   // Do a validation check on the year. 
   // Asumption is: If RTC not set, it will not have the current year.
   
-  if ((now.year() >= 2023) && (now.year() <= 2031)) {
-    now = rtc.now();
+  // It is possible for the PCF8523 or its library to give you a month value of 0, 
+  // that usually means the RTC time/date is invalid
+  if ((now.year() >= TM_VALID_YEAR_START) && (now.year() <= TM_VALID_YEAR_END) && 
+      (now.month() >= 1) && (now.month() <=12) &&
+      (now.day() >= 1) && (now.day() <=31)) {
     RTC_valid = true;
   }
   else {
+    RTC_valid = false;
     Output ("NEED TIME->RTC");
   }
 }

@@ -10,6 +10,7 @@
 #include "include/ssbits.h"
 #include "include/output.h"
 #include "include/lora.h"
+#include "include/wrda.h"
 #include "include/main.h"
 #include "include/cf.h"
 
@@ -24,11 +25,20 @@ int cf_lora_unitid=2;
 int cf_lora_gwid=1;
 int cf_lora_txpower=13;
 int cf_lora_freq=915;
-int cf_obs_period=15;
+// Instruments
+int cf_nowind=0;
 int cf_rg1_enable=0;
-int cf_rg2_enable=0;
-int cf_ds_enable=0;
+int cf_op1;
+int cf_op2;
+int cf_op3;
+int cf_op4;
 int cf_ds_baseline=0;
+int cf_elevation=0;
+// System Timing
+int cf_obs_period=15;
+char *cf_rtro=NULL;
+int cf_rtro_hour=0;
+int cf_rtro_minute=0;
 
 /*
  * ======================================================================================================================
@@ -227,6 +237,42 @@ long SD_findLong(const __FlashStringHelper * key) {
 
 /* 
  * =======================================================================================================================
+ * cf_rtro_validate()
+ * =======================================================================================================================
+ */
+void cf_rtro_validate() {
+  int hour = 0;
+  int minute = 0;
+  bool valid=false;
+
+  int parsed = sscanf(cf_rtro, "%d:%d", &hour, &minute);
+
+  if (parsed == 2) {
+    // H:MM format - validate quarter-hour
+    if ((hour >= 0 && hour <= 23) && (minute == 0 || minute == 15 || minute == 30 || minute == 45)) {
+      valid=true;
+    }
+  } 
+  else if (parsed == 1) {
+    // Just H format (minute = 0)
+    if (hour >= 0 && hour <= 23) {
+      valid=true;
+    }
+  } 
+
+  if (valid) {
+    cf_rtro_hour = hour;
+    cf_rtro_minute = minute;
+    sprintf(msgbuf, " RTRO:%d:%02d", cf_rtro_hour, cf_rtro_minute);
+  }
+  else {
+    sprintf(msgbuf, " RTRO:0 INVALID");
+  }
+  Output(msgbuf);
+}
+
+/* 
+ * =======================================================================================================================
  * SD_ReadConfigFile()
  * =======================================================================================================================
  */
@@ -251,21 +297,86 @@ void SD_ReadConfigFile() {
   if (cf_lora_freq <= 0) { cf_lora_freq = 915; } // Safty Check
   sprintf(msgbuf, "%s=[%d]",  F("CF:lora_freq"), cf_lora_freq);       Output (msgbuf);
 
+  // No Wind = 1
+  cf_nowind      = SD_findInt(F("nowind"));
+  sprintf(msgbuf, "CF:%s=[%d]", F("nowind"), cf_nowind); Output (msgbuf);
+
+  // Rain Gauge 1
+  cf_rg1_enable   = SD_findInt(F("rg1_enable"));
+  sprintf(msgbuf, "%s=[%d]",  F("CF:rg1_enable"), cf_rg1_enable);     Output (msgbuf);
+
+  // Option Pin 1 A4
+  cf_op1   = SD_findInt(F("op1"));
+  sprintf(msgbuf, "%s=[%d]", F("CF:op1"), cf_op1); Output (msgbuf);
+  if ((cf_op1 != OP1_STATE_NULL) && 
+      (cf_op1 != OP1_STATE_RAW) && 
+      (cf_op1 != OP1_STATE_RAIN) && 
+      (cf_op1 != OP1_STATE_DIST_5M) && 
+      (cf_op1 != OP1_STATE_DIST_10M)) {
+    cf_op1 = OP1_STATE_NULL;
+    Output (" OP1 Invalid");
+  }
+  else if (cf_op1 == OP1_STATE_DIST_5M) {
+    dg_resolution_adjust = 5;
+    Output (" DIST5M Set");
+    pinMode(OP1_PIN, INPUT);
+  }
+  else if (cf_op1 == OP1_STATE_DIST_10M) {
+    dg_resolution_adjust = 10;
+    Output (" DIST10M Set");
+    pinMode(OP1_PIN, INPUT);
+  }
+  else if ((cf_op1 == OP1_STATE_RAW) || 
+           (cf_op1 == OP1_STATE_RAIN)) {
+    pinMode(OP1_PIN, INPUT);
+  }
+  
+  // Option Pin 2 A5
+  cf_op2    = SD_findInt(F("op2"));
+  sprintf(msgbuf, "%s=[%d]", F("CF:op2"), cf_op2); Output (msgbuf);
+  if ((cf_op2 != OP2_STATE_NULL) && 
+      (cf_op2 != OP2_STATE_RAW) && 
+      (cf_op2 != OP2_STATE_VOLTAIC)) {
+    cf_op2 = OP2_STATE_NULL;
+    Output (" OP2 Invalid");
+  }
+  if ((cf_op2 == OP2_STATE_RAW) || (cf_op2 == OP2_STATE_VOLTAIC)) {
+     pinMode(OP2_PIN, INPUT);
+  }
+
+  // Option Pin 3 A0
+  cf_op3    = SD_findInt(F("op3"));
+  sprintf(msgbuf, "%s=[%d]", F("CF:op3"), cf_op3); Output (msgbuf);
+  if ((cf_op3 != OP3_STATE_NULL) && 
+      (cf_op3 != OP3_STATE_RAW)) {
+    cf_op3 = OP3_STATE_NULL;
+    Output (" OP3 Invalid");
+  }
+  if ((cf_op3 == OP3_STATE_RAW)) {
+     pinMode(OP3_PIN, INPUT);
+  }
+
+  // Option Pin 4 A1
+  cf_op4    = SD_findInt(F("op4"));
+  sprintf(msgbuf, "%s=[%d]", F("CF:op4"), cf_op4); Output (msgbuf);
+  if ((cf_op4 != OP4_STATE_NULL) && 
+      (cf_op4 != OP4_STATE_RAW)) {
+    cf_op4 = OP3_STATE_NULL;
+    Output (" OP4 Invalid");
+  }
+  if ((cf_op4 == OP4_STATE_RAW)) {
+     pinMode(OP4_PIN, INPUT);
+  }
+
+  cf_ds_baseline = SD_findInt(F("ds_baseline"));
+  sprintf(msgbuf, "%s=[%d]",  F("CF:ds_baseline"), cf_ds_baseline);   Output (msgbuf);
+
+  // System Timing
   cf_obs_period   = SD_findInt(F("obs_period"));
   if (cf_obs_period <= 0) { cf_obs_period = 15; } // Safty Check
   sprintf(msgbuf, "%s=[%d]",  F("CF:obs_period"), cf_obs_period);     Output (msgbuf);
 
-  // Rain
-  cf_rg1_enable   = SD_findInt(F("rg1_enable"));
-  sprintf(msgbuf, "%s=[%d]",  F("CF:rg1_enable"), cf_rg1_enable);     Output (msgbuf);
-
-  cf_rg2_enable   = SD_findInt(F("rg2_enable"));
-  sprintf(msgbuf, "%s=[%d]",  F("CF:rg2_enable"), cf_rg2_enable);     Output (msgbuf);
-
-  // Distance
-  cf_ds_enable    = SD_findInt(F("ds_enable"));
-  sprintf(msgbuf, "%s=[%d]",  F("CF:ds_enable"), cf_ds_enable);       Output (msgbuf);
-
-  cf_ds_baseline = SD_findInt(F("ds_baseline"));
-  sprintf(msgbuf, "%s=[%d]",  F("CF:ds_baseline"), cf_ds_baseline);   Output (msgbuf);
+  cf_rtro = SD_findCharStr(F("rtro"));
+  sprintf(msgbuf, "CF:%s=[%s]", F("rtro"), cf_rtro); Output (msgbuf);
+  cf_rtro_validate();
 }

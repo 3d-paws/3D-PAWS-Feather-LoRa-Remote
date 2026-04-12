@@ -1,5 +1,5 @@
-#define COPYRIGHT "Copyright [2025] [University Corporation for Atmospheric Research]"
-#define VERSION_INFO "FLoRaRemote-251008"
+#define COPYRIGHT "Copyright [2026] [University Corporation for Atmospheric Research]"
+#define VERSION_INFO "FLR-260412"
 /*
  *======================================================================================================================
  * FeatherLoRaRemote - 3D-PAWS-Feather-LoRaRemote
@@ -40,8 +40,36 @@
  *                          Added void LoRaDisableSPI() used in CF.cpp
  *                          Added LoRaSleep() use in loop()
  *           2025-10-08 RJB Bug fixes on INFO messages.
- *           
- * Time Format: 2022:09:19:19:10:00  YYYY:MM:DD:HR:MN:SS
+ *           2025-10-17 RJB Bug fix on MUX TSM initization of tsm_id.
+ *           2025-10-26 RJB Removed unused variable in mux.h and mux.cpp
+ *           2026-03-26 RJB Added DSMUX 1-Wire support for 8 temperature sensors dst0-7
+ *                          Added cf_nowind
+ *                          Clean up SSBits.
+ *                          Bug fix on wind speed, Added Enable/Disable interrupt before/after the 60 samples
+ *                          Added pinmode INPUT to wind rain
+ *                          Removed the support for Tinovi MultiLevel Soil Moisture (4 Soil and 2 Temperature) 
+ *                          Bug fix in statmon.cpp BMX identification
+ *                          Added rtro range changed to 0-23 :00,15,30,45 
+ *                          Add elevation for mslp
+ *                          We now check if its time to roll rain total over before going back to sleep.
+ *           2026-03-29 RJB Added volatile to interrupt routine variable definations
+ *                          Change pin use (A0,A1) over to OP1 and OP2 and remove soil 1-wire temp and moisture
+ *                          Add Voltaic
+ *                          Add BMP581 and SMT45 - rework the i2c 0x44 - 0x47 sensore handling
+ *                          Disabled interrupts when reading and setting shared values with the ISRs
+ *                          Created functions to obtain rg1 and rg2 values
+ *                          Modified rain ISR to only call millis() once.
+ *                          It is possible for the RTC PCF8523 or its library to give you a month value of 0 added check.
+ *                          Add GPS support for Time set, location reporting in INFO and low power mode when not using
+ *                          Removed support for VMEL7700 Lux sensor address 0x10 collides with GPS
+ *                          Change from Serial to Output("DSMUX:Select CH Err");
+ *                          Changed SendAESLoraWanMsg to SendLoraAESMsg plus len check add
+ *                          Changed GetDeviceID() to be a length of 16 instead of 24
+ *           2026-04-12 RJB Code clean up on BMX processing in OBS and Station monitor, utilizing BMX_1_type from initializtion
+ *                          Code clean up switch to %.2f on sprintf 
+ * 
+ * 
+ * Time Format: 2022:09:19:19:10:00  YYYY:MM:DD:HR:MN:SS  Enter UTC time and not local time.
  * 
  * ======================================================================================================================
  * Normal loop operation
@@ -81,7 +109,10 @@
  *     >     #if (true || defined(__AVR__))
  *     41a42
  *     >  #define printf_P printf
- *
+ * 
+ * Compiling Note:
+ * If you were prior compiling for the MKR NB 1500, change the board type to Feather M0 and swap out the 
+ * Arduino/libraries/RF9X-RK-SPI1 library to the RF9X-RK
  * ======================================================================================================================
  * Pin Definitions
  * 
@@ -91,18 +122,18 @@
  * 3V            3v3 Power
  * ARef
  * GND
- * A0            A0       Soil Moisture Sensor 1         Grove A0
- * A1            A1       Dallas Sensor 1wire 1          Grove A0
+ * A0            A0       Option Pin 3                   Grove A0
+ * A1            A1       Option Pin 4                   Grove A0
  * A2            A2       Interrupt For Anemometer       Grove A2
  * A3            A3       Interrupt For Rain Gauge 1     Grove A2
- * A4            A4       Interrupt For Rain Gauge 2     Grove A4
- * A5            A5       Distance Sensor                Grove A4
+ * A4            A4       Option Pin 1                   Grove A4
+ * A5            A5       Option Pin 2                   Grove A4
  * SCK           SCK      SPI0 Clock - SD/LoRa           Not on Grove
  * MOS           MOSI     Used by SD Card/LoRa           Not on Grove
  * MIS           MISO     Used by SDCard/LoRa            Not on Grove
  * RX0           D0                                      Grove UART
  * TX1           D1                                      Grove UART 
- * io1           DIO1     to D6 if LoRa WAN              Not on Grove (Particle Pin D9)
+ * io1           DIO1     to D6 if LoRa WAN              Not on Grove (Particle Pin D9) !!!! Removed for LoRaRemote
    
  * BAT           VBAT Power
  * En            Control - Connect to ground to disable the 3.3v regulator
@@ -113,7 +144,7 @@
  * 10            D10      Used by SD Card as CS          Grove D4  (Particle Pin D5)
  * 9             D9/A7    Voltage Battery Pin            Grove D4  (Particle Pin D4)
  * 6             D6       to DIO1 if LoRa WAN            Grove D2  (Particle Pin D3)
- * 5             D5       Air Quality SET Pin            Grove D2  (Particle Pin D2)
+ * 5             D5       GPS Wake Pin                   Grove D2  (Particle Pin D2)
  * SCL           D3       i2c Clock                      Grove I2C_1
  * SDA           D2       i2c Data                       Grove I2C_1
  * 
@@ -148,10 +179,9 @@
  *=======================================================================================================================
  */
 #include <ArduinoLowPower.h>
-#include <SD.h>
-#include <RTClib.h>
 
 #include "include/ssbits.h"
+#include "include/feather.h"
 #include "include/mux.h"
 #include "include/qc.h"
 #include "include/eeprom.h"
@@ -160,12 +190,14 @@
 #include "include/cf.h"
 #include "include/sdcard.h"
 #include "include/info.h"
+#include "include/dsmux.h"
+#include "include/sensors_i2c_44_47.h"
 #include "include/sensors.h"
 #include "include/output.h"
 #include "include/lora.h"
 #include "include/statmon.h"
-#include "include/smt.h"
 #include "include/support.h"
+#include "include/gps.h"
 #include "include/time.h"
 #include "include/main.h"
 
@@ -175,12 +207,16 @@
  * =======================================================================================================================
  */
 bool JustPoweredOn = true;   // Used to clear SystemStatusBits set during power on device discovery
+
+char versioninfo[sizeof(VERSION_INFO)];  // allocate enough space including null terminator
 char msgbuf[MAX_MSGBUF_SIZE];// Buffer used all over the code
 char *msgp;                  // Pointer used all over the code
 char Buffer32Bytes[32];      // Buffer used all over the code
-int countdown = 300;         // Exit calibration mode when reaches 0 - protects against burnt out pin or forgotten jumper
-unsigned long nextinfo=0;    // Time of Next INFO transmit
-char versioninfo[sizeof(VERSION_INFO)];  // allocate enough space including null terminator
+
+// Local
+int countdown = 300;      // Exit calibration mode when reaches 0 - protects against burnt out pin or forgotten jumper
+unsigned long nextTimeRefresh=0; // Time of Next Time refresh
+unsigned long nextinfo=0; // Time of Next INFO transmit
 
 
 void sleepinterrupt() {
@@ -232,11 +268,17 @@ void setup()
     sprintf(msgbuf, "CF:NO %s", CF_NAME); Output (msgbuf);
   } 
 
+  // Refresh Time 
+  nextTimeRefresh = millis() + (3600 * 4) * 1000; // 4 hours in the future
+
   // Read RTC and set system clock if RTC clock valid
   rtc_initialize();
 
+  gps_initialize();  // if found gps_aquire() will run;
+
   if (RTC_valid) {
     Output("RTC: Valid");
+    EEPROM_initialize();
   }
   else {
     Output("RTC: Not Valid");
@@ -247,12 +289,12 @@ void setup()
   Output(msgbuf);
   delay (2000);
 
-  EEPROM_initialize();
 
   obs_interval_initialize();
   
   if (cf_rg1_enable) {
     // Optipolar Hall Effect Sensor SS451A - Rain1 Gauge
+    pinMode(RAINGAUGE1_IRQ_PIN, INPUT);
     raingauge1_interrupt_count = 0;
     raingauge1_interrupt_stime = millis();
     raingauge1_interrupt_ltime = 0;  // used to debounce the tip
@@ -264,7 +306,8 @@ void setup()
   }
 
   // Optipolar Hall Effect Sensor SS451A - Rain2 Gauge
-  if (cf_rg2_enable) {
+  if (cf_op1 == OP1_STATE_RAIN) {
+    pinMode(RAINGAUGE2_IRQ_PIN, INPUT);
     raingauge2_interrupt_count = 0;
     raingauge2_interrupt_stime = millis();
     raingauge2_interrupt_ltime = 0;  // used to debounce the tip
@@ -275,10 +318,16 @@ void setup()
     Output ("RG2:NOT ENABLED");
   }
 
-  //==================================================
-  // Soil Moisture and Temperature Sensors
-  //==================================================
-  smt_initialize();
+  if (cf_nowind) {
+    Output ("WIND:DISABLED");
+  }
+  else {
+    Output ("WIND:ENABLED");
+    as5600_initialize();
+
+    pinMode(ANEMOMETER_IRQ_PIN, INPUT);
+    attachInterrupt(ANEMOMETER_IRQ_PIN, anemometer_interrupt_handler, FALLING);
+  }
  
   //==================================================
   // Scan Mux Channels (0-6) for i2c Devices
@@ -298,31 +347,36 @@ void setup()
   if (!MUX_exists) {
     tsm_initialize(); // Check main bus
   }
+
+  // Scan Dallas 1-Wire Mux for temperature sensors
+  dsmux_initialize();
+
+  bmx_initialize(); // This needs to run before sensor_initialize_i2c_44_47() so we know 
+                    // what obs tag name to assign to bmp581 if it exists.
+
+  // Scan for sensors BMP581 SHT31 SHT45 HDC302x and initialize
+  sensor_initialize_i2c_44_47();
   
-  bmx_initialize();
   htu21d_initialize();  // This sensor has same i2c address as AS5600L
   mcp9808_initialize();
-  sht_initialize();
   hih8_initialize();
   si1145_initialize();
-  vlx_initialize();
   blx_initialize();
-  as5600_initialize();
-  hdc_initialize();
   lps_initialize();
 
-  // Tinovi Mositure Sensors
+  // Tinovi Mositure Sensor
   tlw_initialize();
-  tmsm_initialize();
 
   // Derived Observations
   wbt_initialize();
   hi_initialize();
   wbgt_initialize();
+  mslp_initialize();
 
   lora_initialize();
 
   // Set a time to force the first observation
+  // It doesn't matter if we are setting to a bad clock source. We handle the bad clock issue in loop()
   wakeuptime = now.unixtime();
 }
 
@@ -336,6 +390,8 @@ void loop()
   static time_t sleep_time = 0;
   time_t time_asleep;
   int GoToSleepTime;
+
+  rtc_timestamp(); // get time from rtc, update datetime structure "now", and update timestamp string
   
   // RTC not set, Get Time for User
   if (!RTC_valid) {
@@ -344,24 +400,35 @@ void loop()
     delay (1000);
       
     if (first) {
+      // Enable Serial if not already
       if (digitalRead(SCE_PIN) != LOW) {
         Serial.begin(9600);
+        delay(2000);
         SerialConsoleEnabled = true;
       }  
     
-      Output("SET RTC ENTER:");
+      // Show invalid time and prompt for UTC Time
+      Output(timestamp);
+      Output(F("SET RTC w/GMT, ENTER:"));
       Output("YYYY:MM:DD:HH:MM:SS");
       first = false;
     }
     
-    if (rtc_readserial()) { // check for serial input, validate for rtc, set rtc, report result
-      Output("!!!!!!!!!!!!!!!!!!!");
-      Output("!!! Press Reset !!!");
-      Output("!!!!!!!!!!!!!!!!!!!");
+    // Core Loop start looking for time
+    // Two things can happen. User enters valid time or we get time from GPS
+    rtc_readserial(); // check for serial input, validate for rtc, set rtc, report result
 
-      while (true) {
-        delay (1000);
-      }
+    if (!RTC_valid) {
+      rtc_refresh(); // Get time from GPS
+    }
+    // Core Loop End looking for time
+
+    if (RTC_valid) {
+      Output(F("!!!!!!!!!!!!!!!!!"));
+      Output(F("!!! Rebooting !!!"));
+      Output(F("!!!!!!!!!!!!!!!!!")); 
+      delay(2000);
+      SystemReset(); // We don't use the watchdog to reboot. So soft reset to keep GPS and RTC powered.
     }
   }
 
@@ -386,21 +453,35 @@ void loop()
       EEPROM_Dump();
       SD_ClearRainTotals(); 
     }
-    
-    now = rtc.now(); 
         
     // Every 24 hours send INFO
+    
     if (now.unixtime() > nextinfo) {      // Upon power on this will be true
       INFO_Do();
       nextinfo = now.unixtime() + (3600 * 24);      
     }
 
-    if (now.unixtime() >= wakeuptime) {   // Upon power on this will be true
-      I2C_Check_Sensors();
+    // Upon power on this will be true
+    // Upon no rain and time has moved pasted the wakeuptime this will be true
+    // If there was a rain tip and time is less than the wakeuptime but time is after the rollover time, this will be true
+    // Aka on each rain tip we check to see if we need to rollover the daily total.
+    if ((now.unixtime() >= wakeuptime) || EEPROM_TimeToRollOver()) { 
       OBS_Do();
-      
+
       // Shutoff System Status Bits related to initialization after we have logged first observation
       JPO_ClearBits();
+    }
+
+    // Update the RTC clock from GPS. 
+    if (gps_exists && (millis() >= nextTimeRefresh)) {
+      if (rtc_refresh()) {
+        // Time should be set and gps should be off, lets get a gps time update in 8 hours.
+        nextTimeRefresh = millis() + (3600 * 8) * 1000;
+      }
+      else {
+        // GPS was left on, so lets try again in 5 minutes or the next time we wake up.
+        nextTimeRefresh = millis() + (5 * 60) * 1000;
+      }
     }
 
     unsigned long stno = seconds_to_next_obs();
@@ -412,7 +493,6 @@ void loop()
       delay (GoToSleepTime);
     }
     else {  
-
       sprintf (Buffer32Bytes, "Sleep for %us", stno);
       Output (Buffer32Bytes);  
 
@@ -429,5 +509,4 @@ void loop()
       Output("Wakeup");
     }
   }
-
 }

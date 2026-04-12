@@ -3,11 +3,8 @@
  *  support.cpp - Support Functions
  * ======================================================================================================================
  */
-#include <Arduino.h>
-#include <Wire.h>
-#include <RTClib.h>
-
 #include "include/cf.h"
+#include "include/feather.h"
 #include "include/output.h"
 #include "include/sensors.h"
 #include "include/wrda.h"
@@ -20,32 +17,12 @@
  * Variables and Data Structures
  * =======================================================================================================================
  */
-int  LED_PIN = LED_BUILTIN;  // Built in LED
-const char* pinNames[] = {
-  "D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7",
-  "D8", "D9", "D10", "D11", "D12", "D13",
-  "A0", "A1", "A2", "A3", "A4", "A5"
-};
-char DeviceID[25];           // A generated ID based on board's 128-bit serial number converted down to 96bits
 
 /*
  * ======================================================================================================================
  * Fuction Definations
  * =======================================================================================================================
  */
-
-/*
- *=======================================================================================================================
- * vbat_get() -- return battery voltage
- *=======================================================================================================================
- */
-float vbat_get() {
-  float v = analogRead(VBATPIN);
-  v *= 2;    // we divided by 2, so multiply back
-  v *= 3.3;  // Multiply by 3.3V, our reference voltage
-  v /= 1024; // convert to voltage
-  return (v);
-}
 
 /* 
  *=======================================================================================================================
@@ -55,7 +32,7 @@ float vbat_get() {
  *  if a device did acknowledge to the address.
  *=======================================================================================================================
  */
-bool I2C_Device_Exist(byte address) {
+bool I2C_Device_Exist(uint8_t address) {
   byte error;
 
   Wire.begin();                     // Connect to I2C as Master (no addess is passed to signal being a slave)
@@ -181,58 +158,6 @@ bool isnumeric(char *s) {
 }
 
 
-/*
- * ======================================================================================================================
- * GetDeviceID() - 
- * 
- * This function reads the 128-bit (16-byte) unique serial number from the 
- * SAMD21 microcontroller's flash memory, compresses it to 12 bytes, and 
- * converts it to a 24-character hexadecimal string.
- * 
- * The compression is done by XORing the first 12 bytes with the last 12 bytes 
- * of the original 16-byte identifier, ensuring all 128 bits contribute to 
- * the final result.
- * 
- * SAM D21/DA1 Family Datas Sheet
- * 10.3.3 Serial Number
- * Each device has a unique 128-bit serial number which is a concatenation of four 32-bit words contained at the
- * following addresses:
- * Word 0: 0x0080A00C
- * Word 1: 0x0080A040
- * Word 2: 0x0080A044
- * Word 3: 0x0080A048
- * The uniqueness of the serial number is guaranteed only when using all 128 bits.
- * ======================================================================================================================
- */
-void GetDeviceID() {
-  // Pointer to the unique 128-bit serial number in flash
-  uint32_t *uniqueID = (uint32_t *)0x0080A00C;
-  
-  // Temporary buffer to store 16 bytes (128 bits)
-  uint8_t fullId[16];
-  
-  // Extract all 16 bytes from the 128-bit serial number
-  for (int i = 0; i < 4; i++) {
-    uint32_t val = uniqueID[i];
-    fullId[i*4] = (val >> 24) & 0xFF;
-    fullId[i*4 + 1] = (val >> 16) & 0xFF;
-    fullId[i*4 + 2] = (val >> 8) & 0xFF;
-    fullId[i*4 + 3] = val & 0xFF;
-  }
-
-  // Compress 16 bytes to 12 bytes using XOR
-  uint8_t compressedId[12];
-  for (int i = 0; i < 12; i++) {
-    compressedId[i] = fullId[i] ^ fullId[i + 4];
-  }
-
-  memset (DeviceID, 0, 25);
-  for (int i = 0; i < 12; i++) {
-    sprintf (DeviceID+strlen(DeviceID), "%02x", compressedId[i]);
-  }
-  DeviceID[24] = '\0'; // Ensure null-termination
-}
-
 /* 
  *=======================================================================================================================
  * obs_interval_initialize() - observation interval 5,6,10,15,20,30
@@ -262,7 +187,9 @@ void obs_interval_initialize() {
  */
 int seconds_to_next_obs() {
   now = rtc.now(); //get the current date-time
-  int wd_sampletime = (cf_ds_enable || AS5600_exists | PM25AQI_exists) ? 60 : 0; // Lets start next obs 1 minute early if we have wind or distance
+
+  // Lets start next obs 1 minute early if we have wind distance or air
+  int wd_sampletime = (!cf_nowind || PM25AQI_exists || (cf_op1 == OP1_STATE_DIST_5M) || (cf_op1 == OP1_STATE_DIST_10M)) ? 60 : 0; 
 
   // seconds remain until the next period boundary
   int stno = ( (cf_obs_period*60) - (now.unixtime() % (cf_obs_period*60)) ); // The mod operation gives us seconds passed last observation period 

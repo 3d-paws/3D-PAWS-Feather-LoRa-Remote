@@ -3,10 +3,6 @@
  * sdcard.cpp - SD Card
  * ======================================================================================================================
  */
-#include <Arduino.h>
-#include <RTClib.h>
-#include <SD.h>
-
 #include "include/ssbits.h"
 #include "include/mux.h"
 #include "include/eeprom.h"

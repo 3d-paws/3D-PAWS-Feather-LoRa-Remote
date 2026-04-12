@@ -74,7 +74,7 @@ obs_period=15
 - When we transmit we are sending to a LoRa gateway id 1. The receiving site must be addressed with the same id.
 - Our LoRa id is set to match the Chords site these observations are destined for. The webhook at on the Particle Console will use this id to direct the observation.
 - Observations data are trans mitted in JSON format. In that a unique device is is transmitted with every transmission. Example "devid":"330eff6367815b7d93bfbcec". This can used if Chords is no longer the end logging site.
-- At startup, INFO message is sent. These will be multiple LoRa messages. Do to message length constraint. INFO provides information on the station's configuration. File INFO.TXT on the SD card will be maintained with the most current information. Below is an example.
+- At startup and every 24 hours after a INFO message is sent. These will be multiple LoRa messages. This is do to the LoRa message length constraint. INFO provides information on the station's configuration. File INFO.TXT on the SD card will be maintained with the most current information. Below is an example.
 
 <div style="overflow:auto; white-space:pre; font-family: monospace; font-size: 8px; line-height: 1.5; height: 100px; border: 1px solid black; padding: 10px;">
 

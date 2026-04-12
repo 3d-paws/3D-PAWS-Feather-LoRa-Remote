@@ -103,22 +103,28 @@ void LoRaSleep() {
 
 /*
  * =======================================================================================================================
- * SendAESLoraWanMsg() 
+ * SendLoraAESMsg() 
  * =======================================================================================================================
  */
-void SendAESLoraWanMsg (int bits,char *msg, int msgLength)
+void SendLoraAESMsg (int bits, char *msg, int msgLength)
 {
   if (LORA_exists) {
-    int padedLength = msgLength + N_BLOCK - msgLength % N_BLOCK;
-    byte cipher [padedLength] ;
+
+    if (msgLength > 239) { // leave padding headroom. // Max length of message is 255
+      Output("LoRa Payload too large");
+      return;
+    }
+
+    int paddedLength = msgLength + N_BLOCK - msgLength % N_BLOCK;
+    byte cipher [paddedLength] ;
     byte iv [N_BLOCK] ;
     byte *b;
+  
     aes.iv_inc();
     aes.set_IV(AES_MYIV);
     aes.get_IV(iv);
     aes.do_aes_encrypt((byte *)msg, msgLength, cipher, AES_KEY, bits, iv); // Results are placed in cypher variable
-
-    rf95.send(cipher, padedLength);
+    rf95.send(cipher, paddedLength);
     rf95.waitPacketSent();
 
     LoRaDisableSPI(); // Disable LoRA SPI0 Chip Select
@@ -181,7 +187,7 @@ void SendLoRaMessage(char *ops, const char *mtype) {
   msgbuf[1] = checksum >> 8;
   msgbuf[2] = checksum % 256;
    
-  SendAESLoraWanMsg (128, msgbuf, msgLength);
+  SendLoraAESMsg (128, msgbuf, msgLength);
 }
 
 /* 
@@ -239,7 +245,6 @@ void lora_initialize() {
   // Validate LoRa variables from CONFIG.TXT
   if (!lora_cf_validate() || !rf95.init()) {
     Output("LoRa:Init failed");
-    SystemStatusBits |= SSB_LORA;  // Turn On Bit
   }
   else {
     // Defaults after init are 434.0MHz, 13dBm, Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on

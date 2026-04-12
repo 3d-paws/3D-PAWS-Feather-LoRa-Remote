@@ -5,9 +5,11 @@
  */
 #include "include/qc.h"
 #include "include/ssbits.h"
+#include "include/cf.h"
 #include "include/output.h"
 #include "include/support.h"
 #include "include/main.h"
+#include "include/sensors_i2c_44_47.h"
 #include "include/sensors.h"
 
 /*
@@ -59,16 +61,6 @@ bool MCP_4_exists = false;
 
 /*
  * ======================================================================================================================
- *  SHTX - I2C - Temperature & Humidity sensor (SHT31)  - Note the SHT40, SHT45 use same i2c address
- * ======================================================================================================================
- */
-Adafruit_SHT31 sht1;
-Adafruit_SHT31 sht2;
-bool SHT_1_exists = false;
-bool SHT_2_exists = false;
-
-/*
- * ======================================================================================================================
  *  HIH8 - I2C - Temperature & Humidity sensor (HIH8000)  -
  * ======================================================================================================================
  */
@@ -95,6 +87,13 @@ bool HI_exists = false;
  */
 bool WBGT_exists = false;
 
+/* 
+ *=======================================================================================================================
+ * MSLP - Mean sea level pressure 
+ *=======================================================================================================================
+ */
+bool MSLP_exists = false;
+
 /*
  * ======================================================================================================================
  *  Si1145 - I2C - UV/IR/Visible Light Sensor
@@ -105,14 +104,6 @@ bool SI1145_exists = false;
 float si_last_vis = 0.0;
 float si_last_ir = 0.0;
 float si_last_uv = 0.0;
-
-/*
- * ======================================================================================================================
- *  VEML7700 - I2C - Lux Sensor
- * ======================================================================================================================
- */
-Adafruit_VEML7700 veml = Adafruit_VEML7700();
-bool VEML7700_exists = false;
 
 /*
  * ======================================================================================================================
@@ -129,16 +120,6 @@ bool BLX_exists = false;
 PM25AQI_OBS_STR pm25aqi_obs;
 Adafruit_PM25AQI pmaq = Adafruit_PM25AQI();
 bool PM25AQI_exists = false;
-
-/*
- * ======================================================================================================================
- *  HDC302x - I2C - Precision Temperature & Humidity Sensor
- * ======================================================================================================================
- */
-Adafruit_HDC302x hdc1;
-Adafruit_HDC302x hdc2;
-bool HDC_1_exists = false;
-bool HDC_2_exists = false;
 
 /*
  * ======================================================================================================================
@@ -161,20 +142,12 @@ bool TLW_exists = false;
 
 /*
  * ======================================================================================================================
- *  Tinovi MultiLevel Soil Moisture (4 Soil and 2 Temperature)
+ *  Tinovi Soil Moisture (4 Soil and 2 Temperature)
  * ======================================================================================================================
  */
 SVCS3 tsm;
 bool TSM_exists = false;
 
-/*
- * ======================================================================================================================
- *  Tinovi MultiLevel Soil Moisture (4 Soil and 2 Temperature)
- * ======================================================================================================================
- */
-SVMULTI tmsm;
-bool TMSM_exists = false;
- 
 /*
  * ======================================================================================================================
  * Fuction Definations
@@ -293,6 +266,96 @@ byte get_Bosch_ChipID (byte address) {
 
 /* 
  *=======================================================================================================================
+ * bmx1_read() - Read tph from Bosch sensor
+ *=======================================================================================================================
+ */
+void bmx1_read(float &p, float &t, float &h) {
+
+  p = -999.9;
+  t = -999.9;
+  h = -999.9;
+
+  if (BMX_1_exists) {
+    switch (BMX_1_type) {
+      case BMX_TYPE_BMP280 :
+        p = bmp1.readPressure()/100.0F;
+        t = bmp1.readTemperature();
+        break;
+        
+      case BMX_TYPE_BME280 :
+        p = bme1.readPressure()/100.0F;
+        t = bme1.readTemperature();
+        h = bme1.readHumidity(); 
+        break;
+
+      case BMX_TYPE_BMP390 :
+        p = bm31.readPressure()/100.0F;
+        t = bm31.readTemperature();
+        break;
+          
+      case BMX_TYPE_BMP388 :
+        p = bm31.readPressure()/100.0F;
+        t = bm31.readTemperature();
+        break;
+        
+      default: // WTF
+        Output ("bmx1_read (WTF)");
+        return;
+        break;
+    }
+    p = (isnan(p) || (p < QC_MIN_P)  || (p > QC_MAX_P))  ? QC_ERR_P  : p;
+    t = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
+    h = (isnan(h) || (h < QC_MIN_RH) || (h > QC_MAX_RH)) ? QC_ERR_RH : h;
+  }
+}
+
+/* 
+ *=======================================================================================================================
+ * bmx2_read() - Read tph from Bosch sensor
+ *=======================================================================================================================
+ */
+void bmx2_read(float &p, float &t, float &h) {
+
+  p = -999.9;
+  t = -999.9;
+  h = -999.9;
+
+  if (BMX_2_exists) {
+    switch (BMX_2_type) {
+      case BMX_TYPE_BMP280 :
+        p = bmp2.readPressure()/100.0F;
+        t = bmp2.readTemperature();
+        break;
+        
+      case BMX_TYPE_BME280 :
+        p = bme2.readPressure()/100.0F;
+        t = bme2.readTemperature();
+        h = bme2.readHumidity(); 
+        break;
+
+      case BMX_TYPE_BMP390 :
+        p = bm32.readPressure()/100.0F;
+        t = bm32.readTemperature();
+        break;
+          
+      case BMX_TYPE_BMP388 :
+        p = bm32.readPressure()/100.0F;
+        t = bm32.readTemperature();
+        break;
+        
+      default: // WTF
+        Output ("bmx1_read (WTF)");
+        return;
+        break;
+    }
+    p = (isnan(p) || (p < QC_MIN_P)  || (p > QC_MAX_P))  ? QC_ERR_P  : p;
+    t = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
+    h = (isnan(h) || (h < QC_MIN_RH) || (h > QC_MAX_RH)) ? QC_ERR_RH : h;
+  }
+}
+
+/* 
+ *=======================================================================================================================
  * bmx_initialize() - Bosch sensor initialize
  *=======================================================================================================================
  */
@@ -307,12 +370,11 @@ void bmx_initialize() {
       if (!bmp1.begin(BMX_ADDRESS_1)) { 
         msgp = (char *) "BMP1 ERR";
         BMX_1_exists = false;
-        SystemStatusBits |= SSB_BMX_1;  // Turn On Bit          
       }
       else {
         BMX_1_exists = true;
         BMX_1_type = BMX_TYPE_BMP280;
-        msgp = (char *) "BMP1 OK";
+        msgp = (char *) "BMP280_1 OK";
         [[maybe_unused]] float p = bmp1.readPressure();
       }
     break;
@@ -322,7 +384,6 @@ void bmx_initialize() {
         if (!bm31.begin_I2C(BMX_ADDRESS_1)) {  // Perhaps it is a BMP390
           msgp = (char *) "BMX1 ERR";
           BMX_1_exists = false;
-          SystemStatusBits |= SSB_BMX_1;  // Turn On Bit          
         }
         else {
           BMX_1_exists = true;
@@ -343,7 +404,6 @@ void bmx_initialize() {
       if (!bm31.begin_I2C(BMX_ADDRESS_1)) { 
         msgp = (char *) "BM31 ERR";
         BMX_1_exists = false;
-        SystemStatusBits |= SSB_BMX_1;  // Turn On Bit          
       }
       else {
         BMX_1_exists = true;
@@ -366,12 +426,11 @@ void bmx_initialize() {
       if (!bmp2.begin(BMX_ADDRESS_2)) { 
         msgp = (char *) "BMP2 ERR";
         BMX_2_exists = false;
-        SystemStatusBits |= SSB_BMX_2;  // Turn On Bit          
       }
       else {
         BMX_2_exists = true;
         BMX_2_type = BMX_TYPE_BMP280;
-        msgp = (char *) "BMP2 OK";
+        msgp = (char *) "BMP280_2 OK";
         [[maybe_unused]] float p = bmp2.readPressure();
       }
     break;
@@ -381,7 +440,6 @@ void bmx_initialize() {
         if (!bm32.begin_I2C(BMX_ADDRESS_2)) {  // Perhaps it is a BMP390
           msgp = (char *) "BMX2 ERR";
           BMX_2_exists = false;
-          SystemStatusBits |= SSB_BMX_2;  // Turn On Bit          
         }
         else {
           BMX_2_exists = true;
@@ -402,7 +460,6 @@ void bmx_initialize() {
       if (!bm32.begin_I2C(BMX_ADDRESS_2)) { 
         msgp = (char *) "BM32 ERR";
         BMX_2_exists = false;
-        SystemStatusBits |= SSB_BMX_2;  // Turn On Bit          
       }
       else {
         BMX_2_exists = true;
@@ -431,7 +488,6 @@ void htu21d_initialize() {
   if (!htu.begin()) {
     msgp = (char *) "HTU NF";
     HTU21DF_exists = false;
-    SystemStatusBits |= SSB_HTU21DF;  // Turn On Bit
   }
   else {
     HTU21DF_exists = true;
@@ -453,7 +509,6 @@ void mcp9808_initialize() {
   if (!mcp1.begin(MCP_ADDRESS_1)) {
     msgp = (char *) "MCP1 NF";
     MCP_1_exists = false;
-    SystemStatusBits |= SSB_MCP_1;  // Turn On Bit
   }
   else {
     MCP_1_exists = true;
@@ -466,7 +521,6 @@ void mcp9808_initialize() {
   if (!mcp2.begin(MCP_ADDRESS_2)) {
     msgp = (char *) "MCP2 NF";
     MCP_2_exists = false;
-    SystemStatusBits |= SSB_MCP_2;  // Turn On Bit
   }
   else {
     MCP_2_exists = true;
@@ -479,7 +533,6 @@ void mcp9808_initialize() {
   if (!mcp3.begin(MCP_ADDRESS_3)) {
     msgp = (char *) "MCP3 NF";
     MCP_3_exists = false;
-    SystemStatusBits |= SSB_MCP_3;  // Turn On Bit
   }
   else {
     MCP_3_exists = true;
@@ -492,46 +545,10 @@ void mcp9808_initialize() {
   if (!mcp4.begin(MCP_ADDRESS_4)) {
     msgp = (char *) "MCP4 NF";
     MCP_4_exists = false;
-    // SystemStatusBits |= SSB_MCP_4;  // Turn On Bit
   }
   else {
     MCP_4_exists = true;
     msgp = (char *) "MCP4 OK";
-  }
-  Output (msgp);
-}
-
-/* 
- *=======================================================================================================================
- * sht_initialize() - SHT31 sensor initialize
- *=======================================================================================================================
- */
-void sht_initialize() {
-  Output("SHT:INIT");
-  
-  // 1st SHT31 I2C Temperature/Humidity Sensor (I2C ADDRESS = 0x44)
-  sht1 = Adafruit_SHT31();
-  if (!sht1.begin(SHT_ADDRESS_1)) {
-    msgp = (char *) "SHT1 NF";
-    SHT_1_exists = false;
-    SystemStatusBits |= SSB_SHT_1;  // Turn On Bit
-  }
-  else {
-    SHT_1_exists = true;
-    msgp = (char *) "SHT1 OK";
-  }
-  Output (msgp);
-
-  // 2nd SHT31 I2C Temperature/Humidity Sensor (I2C ADDRESS = 0x45)
-  sht2 = Adafruit_SHT31();
-  if (!sht2.begin(SHT_ADDRESS_2)) {
-    msgp = (char *) "SHT2 NF";
-    SHT_2_exists = false;
-    SystemStatusBits |= SSB_SHT_2;  // Turn On Bit
-  }
-  else {
-    SHT_2_exists = true;
-    msgp = (char *) "SHT2 OK";
   }
   Output (msgp);
 }
@@ -551,7 +568,6 @@ void hih8_initialize() {
   else {
     msgp = (char *) "HIH8 NF";
     HIH8_exists = false;
-    SystemStatusBits |= SSB_HIH8;  // Turn On Bit
   }
   Output (msgp);
 }
@@ -830,11 +846,10 @@ double wbgt_using_wbt(double Ta, double Tg, double Tw) {
 void si1145_initialize() {
   Output("SI1145:INIT");
   
-  // SSB_SI1145 UV index & IR & Visible Sensor (I2C ADDRESS = 0x60)
+  // SI1145 UV index & IR & Visible Sensor (I2C ADDRESS = 0x60)
   if (! uv.begin(&Wire)) {
     Output ("SI:NF");
     SI1145_exists = false;
-    SystemStatusBits |= SSB_SI1145;  // Turn On Bit
   }
   else {
     SI1145_exists = true;
@@ -850,52 +865,6 @@ void si1145_initialize() {
     sprintf (msgbuf, "SI:UV[%d.%02d]", (int)si_last_uv, (int)(si_last_uv*100.0)%100); 
     Output (msgbuf);
   }
-}
-
-/* 
- *=======================================================================================================================
- * vlx_initialize() - VEML7700 sensor initialize
- * 
- * SEE https://learn.microsoft.com/en-us/windows/win32/sensorsapi/understanding-and-interpreting-lux-values
- * 
- * This data set is for illustration and may not be completely accurate for all users or situations.
- * 
- * Lighting condition     From (lux)     To (lux)     Mean value (lux)     Lighting step
- * Pitch Black            0              10           5                    1
- * Very Dark              11             50           30                   2
- * Dark Indoors           51             200          125                  3
- * Dim Indoors            201            400          300                  4
- * Normal Indoors         401            1000         700                  5
- * Bright Indoors         1001           5000         3000                 6
- * Dim Outdoors           5001           10,000       7500                 7
- * Cloudy Outdoors        10,001         30,000       20,000               8
- * Direct Sunlight        30,001         100,000      65,000               9
- * 
- * From www.vishay.com - Designing the VEML7700 Into an Application
- * 1    lx Full moon overhead at tropical latitudes
- * 3.4  lx Dark limit of civil twilight under a clear sky
- * 50   lx Family living room
- * 80   lx Hallway / bathroom
- * 100  lx Very dark overcast day
- * 320  lx to 500 lx Office lighting
- * 400  lx Sunrise or sunset on a clear day
- * 1000 lx Overcast day; typical TV studio lighting
- * 
- *=======================================================================================================================
- */
-void vlx_initialize() {
-  Output("VLX:INIT");
-
-  if (veml.begin()) {
-    VEML7700_exists = true;
-    msgp = (char *) "VLX OK";
-  }
-  else {
-    msgp = (char *) "VLX NF";
-    VEML7700_exists = false;
-    SystemStatusBits |= SSB_VLX;  // Turn On Bit
-  }
-  Output (msgp);
 }
 
 /* 
@@ -943,7 +912,6 @@ void blx_initialize() {
   else {
     BLX_exists = false;
     msgp = (char *) "BLX:NF";
-    SystemStatusBits |= SSB_BLX;  // Turn On Bit
   }
   Output (msgp);
 }
@@ -1019,7 +987,6 @@ void pm25aqi_initialize() {
   if (Wire.endTransmission()) {
     msgp = (char *) "PM:NF";
     PM25AQI_exists = false;
-    SystemStatusBits |= SSB_PM25AQI;  // Turn On Bit
   }
   else {
     if (! pmaq.begin_I2C()) {      // connect to the sensor over I2C
@@ -1038,45 +1005,6 @@ void pm25aqi_initialize() {
 
 /* 
  *=======================================================================================================================
- * hdc_initialize() - HDC3002c sensor initialize
- *=======================================================================================================================
- */
-void hdc_initialize() {
-  Output("HDC:INIT");
-  
-  // 1st HDC I2C Temperature/Humidity Sensor (I2C ADDRESS = 0x44)
-  hdc1 = Adafruit_HDC302x();
-  if (!hdc1.begin(HDC_ADDRESS_1, &Wire)) {
-    msgp = (char *) "HDC1 NF";
-    HDC_1_exists = false;
-    SystemStatusBits |= SSB_HDC_1;  // Turn On Bit
-  }
-  else {
-    double t,h;
-    hdc1.readTemperatureHumidityOnDemand(t, h, TRIGGERMODE_LP0);
-    HDC_1_exists = true;
-    msgp = (char *) "HDC1 OK";
-  }
-  Output (msgp);
-
-  // 2nd HDC I2C Temperature/Humidity Sensor (I2C ADDRESS = 0x45)
-  hdc2 = Adafruit_HDC302x();
-  if (!hdc2.begin(HDC_ADDRESS_2, &Wire)) {
-    msgp = (char *) "HDC2 NF";
-    HDC_2_exists = false;
-    SystemStatusBits |= SSB_HDC_2;  // Turn On Bit
-  }
-  else {
-    double t,h;
-    hdc2.readTemperatureHumidityOnDemand(t, h, TRIGGERMODE_LP0);
-    HDC_2_exists = true;
-    msgp = (char *) "HDC2 OK";
-  }
-  Output (msgp);
-}
-
-/* 
- *=======================================================================================================================
  * lps_initialize() - LPS35HW Pressure and Temperature initialize
  *=======================================================================================================================
  */
@@ -1088,7 +1016,6 @@ void lps_initialize() {
   if (!lps1.begin_I2C(LPS_ADDRESS_1, &Wire)) {
     msgp = (char *) "LPS1 NF";
     LPS_1_exists = false;
-    SystemStatusBits |= SSB_LPS_1;  // Turn On Bit
   }
   else {
     [[maybe_unused]] float t,p;
@@ -1104,7 +1031,6 @@ void lps_initialize() {
   if (!lps2.begin_I2C(LPS_ADDRESS_2, &Wire)) {
     msgp = (char *) "LPS2 NF";
     LPS_2_exists = false;
-    SystemStatusBits |= SSB_LPS_2;  // Turn On Bit
   }
   else {
     [[maybe_unused]] float t,p;
@@ -1133,7 +1059,6 @@ void tlw_initialize() {
     tlw.init(TLW_ADDRESS);
     msgp = (char *) "TLW OK";
     TLW_exists = true;
-    SystemStatusBits |= SSB_TLW;  // Turn On Bit
   }
   Output (msgp);
 }
@@ -1155,132 +1080,75 @@ void tsm_initialize() {
     tsm.init(TSM_ADDRESS);
     msgp = (char *) "TSM OK";
     TSM_exists = true;
-    SystemStatusBits |= SSB_TSM;  // Turn On Bit
   }
   Output (msgp);
 }
 
 /* 
  *=======================================================================================================================
- * tmsm_initialize() -  Tinovi MultiLevel Soil Moisture initialize
+ * mslp_initialize() - mean sea level pressure init MSLP_exists if all the input exist.
+ *  Dependants: 
+ *    Surface air temperature Ts (deg C)  sht1_temp       Ts
+ *    Relative humidity RH (%%)           sht1_humid      RH
+ *    Station pressure ps (hPa)           bmx_1_pressure  ps
+ *    Station height (m)                  cf_elevation    station_height
+ * 
+ * Testing Information
+ *   https://www.airnav.com/airport/KEIK - Provides Elevation
+ *   https://www.weather.gov/wrh/timeseries?site=KEIK - Provides current MSLP
  *=======================================================================================================================
  */
-void tmsm_initialize() {
-  Output("TMSM:INIT");
-  
-  // Tinovi MultiLevel Soil Moisture initialize (I2C ADDRESS = 0x65)
-  if (!I2C_Device_Exist(TMSM_ADDRESS)) { 
-    msgp = (char *) "TMSM NF";
-    TMSM_exists = false;
+void mslp_initialize() {
+  Output("MSLP:INIT");
+  if ((cf_elevation != QC_ERR_ELEV) &&  BMX_1_exists && SHT_1_exists) {
+    MSLP_exists = true;
+    Output ("MSLP:OK");
   }
   else {
-    tmsm.init(TMSM_ADDRESS);
-    msgp = (char *) "TMSM OK";
-    TMSM_exists = true;
-    SystemStatusBits |= SSB_TMSM;  // Turn On Bit
+    Output ("MSLP:NF");
   }
-  Output (msgp);
 }
 
-/*
- * ======================================================================================================================
- * I2C_Check_Sensors() - See if each I2C sensor responds on the bus and take action accordingly             
- * ======================================================================================================================
+/* 
+ *=======================================================================================================================
+ * mslp_caculate() - mean sea level pressure caculate
+ *  Inputs: 
+ *    Surface air temperature Ts (deg C)  sht1_temp       Ts
+ *    Relative humidity RH (%%)           sht1_humid      RH
+ *    Station pressure ps (hPa)           bmx_1_pressure  ps
+ *    Station height (m)                  cf_elevation    station_height
+ *=======================================================================================================================
  */
-void I2C_Check_Sensors() {
+double mslp_calculate(float Ts, float RH, float ps, int station_height) {
+  double e, r, q;
+  double L = 0.0065;   // Lapse rate (K/m)
+  double T, Tv, P0;
+  double Td;
 
-  // BMX_1 Barometric Pressure 
-  if (I2C_Device_Exist (BMX_ADDRESS_1)) {
-    // Sensor online but our state had it offline
-    if (BMX_1_exists == false) {
-      if (BMX_1_chip_id == BME280_BMP390_CHIP_ID) {
-        if (bmp1.begin(BMX_ADDRESS_1)) { 
-          BMX_1_exists = true;
-          Output ("BMP1 ONLINE");
-          SystemStatusBits &= ~SSB_BMX_1; // Turn Off Bit
-        } 
-      }
-      else if (BMX_1_chip_id == BME280_BMP390_CHIP_ID) {
-        if (bme1.begin(BMX_ADDRESS_1)) { 
-          BMX_1_exists = true;
-          Output ("BME1 ONLINE");
-          SystemStatusBits &= ~SSB_BMX_1; // Turn Off Bit
-        }          
-      }
-      else {
-        if (bm31.begin_I2C(BMX_ADDRESS_1)) { 
-          BMX_1_exists = true;
-          Output ("BM31 ONLINE");
-          SystemStatusBits &= ~SSB_BMX_1; // Turn Off Bit
-        }                  
-      }      
-    }
-  }
-  else {
-    // Sensor offline but our state has it online
-    if (BMX_1_exists == true) {
-      BMX_1_exists = false;
-      Output ("BMX1 OFFLINE");
-      SystemStatusBits |= SSB_BMX_1;  // Turn On Bit 
-    }    
+  if ((Ts == QC_ERR_T) || (RH == QC_ERR_RH) || (ps == QC_ERR_P) || (station_height == QC_ERR_ELEV) ) {
+    return (QC_ERR_P);
   }
 
-  // BMX_2 Barometric Pressure 
-  if (I2C_Device_Exist (BMX_ADDRESS_2)) {
-    // Sensor online but our state had it offline
-    if (BMX_2_exists == false) {
-      if (BMX_2_chip_id == BME280_BMP390_CHIP_ID) {
-        if (bmp2.begin(BMX_ADDRESS_2)) { 
-          BMX_2_exists = true;
-          Output ("BMP2 ONLINE");
-          SystemStatusBits &= ~SSB_BMX_2; // Turn Off Bit
-        } 
-      }
-      else if (BMX_2_chip_id == BME280_BMP390_CHIP_ID) {
-        if (bme2.begin(BMX_ADDRESS_2)) { 
-          BMX_2_exists = true;
-          Output ("BME2 ONLINE");
-          SystemStatusBits &= ~SSB_BMX_2; // Turn Off Bit
-        }          
-      }
-      else {
-         if (bm32.begin_I2C(BMX_ADDRESS_2)) { 
-          BMX_2_exists = true;
-          Output ("BM32 ONLINE");
-          SystemStatusBits &= ~SSB_BMX_2; // Turn Off Bit
-        }                         
-      }     
-    }
-  }
-  else {
-    // Sensor offline but we our state has it online
-    if (BMX_2_exists == true) {
-      BMX_2_exists = false;
-      Output ("BMX2 OFFLINE");
-      SystemStatusBits |= SSB_BMX_2;  // Turn On Bit 
-    }    
-  }
+  // Calculate dew point Td (deg C) from Ts and RH
+  Td = Ts - ((100.0 - RH) / 5.0);
 
-#ifdef NOWAY    // Sensor fails to update if this code is enabled
-  // MCP9808 Precision I2C Temperature Sensor
-  if (I2C_Device_Exist (MCP_ADDRESS_1)) {
-    // Sensor online but our state had it offline
-    if (MCP_1_exists == false) {
-      // See if we can bring sensor online
-      if (mcp1.begin(MCP_ADDRESS_1)) {
-        MCP_1_exists = true;
-        Output ("MCP ONLINE");
-        SystemStatusBits &= ~SSB_MCP_1; // Turn Off Bit
-      }
-    }
-  }
-  else {
-    // Sensor offline but we our state has it online
-    if (MCP_1_exists == true) {
-      MCP_1_exists = false;
-      Output ("MCP OFFLINE");
-      SystemStatusBits |= SSB_MCP_1;  // Turn On Bit
-    }   
-  }
-#endif
+  // Step 1: Vapor pressure (hPa)
+  e = 6.112 * exp((17.67 * Td) / (Td + 243.5));
+
+  // Step 2: Mixing ratio r (kg/kg)
+  r = 0.622 * e / (ps - e);
+
+  // Step 3: Specific humidity q (kg/kg)
+  q = r / (1.0 + r);
+
+  // Mean temperature in Kelvin
+  T = (Ts + 273.15) + (L * station_height / 2.0);
+
+  // Virtual temperature (K)
+  Tv = T * (1.0 + 0.61 * q);
+
+  // Calculate mean sea level pressure (hPa) using the exponential formula
+  P0 = ps * exp((9.80665 * station_height) / (287.05 * Tv));
+
+  return (P0);
 }

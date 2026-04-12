@@ -54,3 +54,8 @@
 #define QC_MIN_RG      0         // mm
 #define QC_MAX_RG      30.0      // mm based on the world-record 1-minute rainfall in Maryland in 1956 (31.24 mm or 1.23")
 #define QC_ERR_RG      -999.9    // Rain Gauge Error
+
+// Elevation - Mount Everest measured from sea level 8,848.86
+#define QC_MIN_ELEV    -440      // m - Dead Sea, is currently about -439.78 meters (below sea level)
+#define QC_MAX_ELEV    8849      // m - Mount Everest measured from sea level 8,848.86
+#define QC_ERR_ELEV    -999      // m default to sea level

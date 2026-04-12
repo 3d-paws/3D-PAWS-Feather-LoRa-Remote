@@ -3,20 +3,23 @@
  *  info.cpp - Station Information Functions
  * ======================================================================================================================
  */
-#include <Arduino.h>
-#include <SD.h>
-#include <RTClib.h>
+//#include <Arduino.h>
+//#include <SD.h>
+//#include <RTClib.h>
 
 #include "include/ssbits.h"
-#include "include/mux.h"
+#include "include/feather.h"
 #include "include/eeprom.h"
+#include "include/gps.h"
+#include "include/mux.h"
+#include "include/dsmux.h"
 #include "include/cf.h"
+#include "include/sensors_i2c_44_47.h"
 #include "include/sensors.h"
 #include "include/wrda.h"
 #include "include/sdcard.h"
 #include "include/output.h"
 #include "include/lora.h"
-#include "include/smt.h"
 #include "include/support.h"
 #include "include/time.h"
 #include "include/main.h"
@@ -60,6 +63,7 @@ void INFO_Do()
   float batt;
   bool oktosend = false; 
 
+  
   memset(header, 0, sizeof(header));
   memset(rest, 0, sizeof(rest));
   memset(loramsg, 0, sizeof(loramsg));
@@ -67,19 +71,30 @@ void INFO_Do()
 
   rtc_timestamp();
   
-  // Battery Voltage and System Status
-  batt = vbat_get();
+  // BUILD HEADER ======================================================================================
 
   sprintf (header, "\"at\":\"%s\",\"id\":%d,\"devid\":\"%s\",\"mtype\":\"IF\"",
     timestamp, cf_lora_unitid, DeviceID);
 
   sprintf (fullmsg, "{%s", header);
 
+
+  // BUILD BASE INFO ===================================================================================
+
+  // Battery Voltage and System Status
+  batt = vbat_get();
+
   sprintf (rest, ",\"ver\":\"%s\",\"bv\":%d.%02d,\"hth\":%d,",
     versioninfo, (int)batt, (int)(batt*100)%100, SystemStatusBits);
 
   sprintf (rest+strlen(rest), "\"obsi\":\"%dm\",\"obsti\":\"%dm\",\"t2nt\":\"%ds\",",
     cf_obs_period, cf_obs_period, seconds_to_next_obs());
+
+  // Station Elevation
+  sprintf (rest+strlen(rest), "\"elev\":%d,", cf_elevation);
+
+  // Rain total rollover offset
+  sprintf(rest+strlen(rest), "\"rtro\":\"%d:%02d\",", cf_rtro_hour, cf_rtro_minute);
 
   // LoRa
   if (LORA_exists) {
@@ -100,13 +115,16 @@ void INFO_Do()
   sprintf (loramsg, "{%s%s}", header, rest);
   SendLoRaMessage(loramsg, "IF");
   delay(500); // Its Recommended before sending another message
+
+  // SEND DEVS ======================================================================================
   
   // Clear buffers
   memset(loramsg, 0, sizeof(loramsg));
   memset(rest, 0, sizeof(rest));
 
-  comma="";
-  sprintf (rest+strlen(rest), "\"devs\":\"");
+  sprintf (rest, ",\"devs\":\"");
+
+  comma = "";
   if (eeprom_exists) {
     sprintf (rest+strlen(rest), "%seeprom", comma);
     comma=",";    
@@ -115,24 +133,42 @@ void INFO_Do()
     sprintf (rest+strlen(rest), "%smux", comma);
     comma=",";    
   }
+  if (DSMUX_exists) {
+    sprintf (rest+strlen(rest), "%sdsmux", comma);
+    comma=",";    
+  }
   if (SD_exists) {
     sprintf (rest+strlen(rest), "%ssd", comma);
     comma=",";    
   }
+  if (gps_exists) {
+    sprintf (rest+strlen(rest), "%sgps", comma);
+    comma=","; 
+  }
   // End of Discovered Devices List
-  sprintf (rest+strlen(rest), "\""); 
+  sprintf (rest+strlen(rest), "\"");
+
+  if (gps_exists) {
+    // add detailed gps information
+    if (gps_valid) {
+      sprintf (rest+strlen(rest), ",\"gps\":{\"lat\":%f,\"lon\":%f,\"alt\":%f,\"sat\":%d,\"hdop\":%f,\"on\":%d}",
+        gps_lat, gps_lon, gps_altm, gps_sat, gps_hdop, (gps_on)?1:0);
+    }
+  }
 
   //================================
   // Put the parts together and send
   //================================
   
   // Grow our full message
-  sprintf (fullmsg+strlen(fullmsg), "%s,\"sensors\":\"", rest);
+  sprintf (fullmsg+strlen(fullmsg), "%s", rest);
 
   Output("IFDO:SENDING");
   sprintf (loramsg, "{%s%s}", header, rest);
   SendLoRaMessage(loramsg, "IF");
   delay(500); // Its Recommended before sending another message
+
+  // SEND SENSORS PART1 ======================================================================================
   
   // Clear buffers
   memset(loramsg, 0, sizeof(loramsg));
@@ -164,22 +200,10 @@ void INFO_Do()
     sprintf (rest+strlen(rest), "%sMCP4/gt2", comma);
     comma=",";
   }
-  if (SHT_1_exists) {
-    sprintf (rest+strlen(rest), "%sSHT1", comma);
-    comma=",";
-  }
-  if (SHT_2_exists) {
-    sprintf (rest+strlen(rest), "%sSHT2", comma);
-    comma=",";
-  }
-  if (HDC_1_exists) {
-    sprintf (rest+strlen(rest), "%sHDC1", comma);
-    comma=",";
-  }
-  if (HDC_2_exists) {
-    sprintf (rest+strlen(rest), "%sHDC2", comma);
-    comma=",";
-  }
+
+  // Add 0x44-)x47 sensors to the list
+  sensor_i2c_44_47_info(rest, 128, comma);
+
   if (LPS_1_exists) {
     sprintf (rest+strlen(rest), "%sLPS1", comma);
     comma=",";
@@ -194,10 +218,6 @@ void INFO_Do()
   }
   if (SI1145_exists) {
     sprintf (rest+strlen(rest), "%sSI", comma);
-    comma=",";
-  }
-  if (VEML7700_exists) {
-    sprintf (rest+strlen(rest), "%sVEML", comma);
     comma=",";
   }
   if (BLX_exists) {
@@ -215,8 +235,10 @@ void INFO_Do()
   //================================
   if (strlen(rest)) {
     // Grow our full message
-    sprintf (fullmsg+strlen(fullmsg), "\"%s", rest);
-    sensorcomma=",";
+    sprintf (fullmsg+strlen(fullmsg), "\"sensors\":\"%s", rest);
+    if (strlen(comma) > 0) {
+      sensorcomma=",";
+    }
   
     Output("IFDO:SEND SENSORS");
     sprintf (loramsg, "{%s,\"sensors\":\"%s\"}", header, rest);
@@ -227,6 +249,8 @@ void INFO_Do()
     memset(loramsg, 0, sizeof(loramsg));
     memset(rest, 0, sizeof(rest));
   }
+
+  // SEND SENSORS PART2 ======================================================================================
   
   // SENSORS  
   comma="";
@@ -238,10 +262,6 @@ void INFO_Do()
     sprintf (rest+strlen(rest), "%sTSM", comma);
     comma=",";
   }
-  if (TMSM_exists) {
-    sprintf (rest+strlen(rest), "%sTMSM", comma);
-    comma=",";
-  } 
   if (HI_exists) {
     sprintf (rest+strlen(rest), "%sHI", comma);
     comma=",";
@@ -266,23 +286,40 @@ void INFO_Do()
   if (cf_rg1_enable) {
     sprintf (rest+strlen(rest), "%sRG1(%s)", comma, pinNames[RAINGAUGE1_IRQ_PIN]); 
     comma=",";
+  }
+  if (cf_op1 == OP1_STATE_RAW) {
+    sprintf (rest+strlen(rest), "%sOP1R(%s)", comma, pinNames[OP1_PIN]);
+    comma=",";
   } 
-  if (cf_rg2_enable) {
+  if (cf_op1 == OP1_STATE_RAIN) {
     sprintf (rest+strlen(rest), "%sRG2(%s)", comma, pinNames[RAINGAUGE2_IRQ_PIN]);
     comma=",";
   } 
-  if (cf_ds_enable) {
-    sprintf (rest+strlen(rest), "%sDIST %s(%s)", comma, 
-     (cf_ds_enable==5) ? "5M" : "10M", pinNames[DISTANCE_GAUGE_PIN]);
+  if (cf_op1 == OP1_STATE_DIST_5M) {
+    sprintf (rest+strlen(rest), "%s5MDIST(%s,%d)", 
+      comma, pinNames[DISTANCE_GAUGE_PIN], cf_ds_baseline);
     comma=",";
   } 
-  
-  for (int probe=0; probe<NPROBES; probe++) {
-    if (ds_found[probe]) {
-      sprintf (rest+strlen(rest), "%sSM%d(%s),ST%d(%s)",  
-        comma, probe, pinNames[sm_pn[probe]], probe, pinNames[st_pn[probe]]);
-        comma=",";   
-    }
+  if (cf_op1 == OP1_STATE_DIST_10M) {
+    sprintf (rest+strlen(rest), "%s10MDIST(%s,%d)", 
+      comma, pinNames[DISTANCE_GAUGE_PIN], cf_ds_baseline);
+    comma=",";
+  }
+  if (cf_op2 == OP2_STATE_RAW) {
+    sprintf (rest+strlen(rest), "%sOP2R(%s)", comma, pinNames[OP2_PIN]);
+    comma=",";
+  }
+  if (cf_op2 == OP2_STATE_VOLTAIC) {
+    sprintf (rest+strlen(rest), "%sVBV(%s)", comma, pinNames[OP2_PIN]);
+    comma=",";
+  }
+  if (cf_op3 == OP3_STATE_RAW) {
+    sprintf (rest+strlen(rest), "%sOP3R(%s)", comma, pinNames[OP3_PIN]);
+    comma=",";
+  }
+  if (cf_op4 == OP4_STATE_RAW) {
+    sprintf (rest+strlen(rest), "%sOP4R(%s)", comma, pinNames[OP4_PIN]);
+    comma=",";
   }
 
   //================================
@@ -292,7 +329,9 @@ void INFO_Do()
   if (strlen(rest)) {
     // Grow our full message
     sprintf (fullmsg+strlen(fullmsg), "%s%s", sensorcomma, rest);
-    sensorcomma = ",";
+    if (strlen(comma) > 0) {
+      sensorcomma=",";
+    }
   
     Output("IFDO:SEND SENSORS");
     sprintf (loramsg, "{%s,\"sensors\":\"%s\"}", header, rest);
@@ -303,6 +342,8 @@ void INFO_Do()
     memset(loramsg, 0, sizeof(loramsg));
     memset(rest, 0, sizeof(rest));
   }
+
+  // SEND MUX SENSORS ======================================================================================
   
   // MUX SENSORS  
   comma="";
@@ -334,11 +375,13 @@ void INFO_Do()
   //================================
   
   // Adding closing }
-  sprintf (fullmsg+strlen(fullmsg), "}");
+  sprintf (fullmsg+strlen(fullmsg), "\"}");
   Serial_writeln(fullmsg); 
 
   // Update INFO.TXT file
   if (SD_exists) {
+    LoRaDisableSPI(); // Disable LoRA SPI0 Chip Select
+
     File fp = SD.open(SD_INFO_FILE, FILE_WRITE | O_TRUNC); 
     if (fp) {
       fp.println(fullmsg);
@@ -352,5 +395,4 @@ void INFO_Do()
       Output ("SD:Open(Info)ERR");
     }
   }
-
 }

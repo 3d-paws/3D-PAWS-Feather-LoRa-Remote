@@ -3,6 +3,8 @@
  *  main.h - Main Code Definations
  * ======================================================================================================================
  */
+#include <Arduino.h>
+
 #define MAX_MSGBUF_SIZE 256
 
 // Extern variables
