@@ -140,10 +140,10 @@
  * USB           VBUS Power
  * 13            D13      LED                            Not on Grove 
  * 12            D12      Serial Console Enable          Not on Grove
- * 11            D11      Enable Sensors 2n2222/2N3904   Not on Grove
+ * 11            D11      Unused                         Not on Grove
  * 10            D10      Used by SD Card as CS          Grove D4  (Particle Pin D5)
  * 9             D9/A7    Voltage Battery Pin            Grove D4  (Particle Pin D4)
- * 6             D6       to DIO1 if LoRa WAN            Grove D2  (Particle Pin D3)
+ * 6             D6       AQS reset pin                  Grove D2  (Particle Pin D3)
  * 5             D5       GPS Wake Pin                   Grove D2  (Particle Pin D2)
  * SCL           D3       i2c Clock                      Grove I2C_1
  * SDA           D2       i2c Data                       Grove I2C_1
@@ -269,7 +269,7 @@ void setup()
   } 
 
   // Refresh Time 
-  nextTimeRefresh = millis() + (3600 * 4) * 1000; // 4 hours in the future
+  nextTimeRefresh = millis() + (3600 * RTC_UPDATE_INTERVAL) * 1000; // 4 hours in the future
 
   // Read RTC and set system clock if RTC clock valid
   rtc_initialize();
@@ -473,14 +473,20 @@ void loop()
     }
 
     // Update the RTC clock from GPS. 
-    if (gps_exists && (millis() >= nextTimeRefresh)) {
-      if (rtc_refresh()) {
-        // Time should be set and gps should be off, lets get a gps time update in 8 hours.
-        nextTimeRefresh = millis() + (3600 * 8) * 1000;
+    if (gps_exists) {
+      if (gps_on || (millis() >= nextTimeRefresh)) {
+        if (rtc_refresh()) {
+          // Time should be set and gps should be off, lets get a gps time update in N hours.
+          nextTimeRefresh = millis() + (3600 * RTC_UPDATE_INTERVAL) * 1000;
+        }
+        else {
+          // GPS was left on, so lets try again in 5 minutes or the next time we wake up.
+          nextTimeRefresh = millis() + (5 * 60) * 1000;
+        }
       }
-      else {
-        // GPS was left on, so lets try again in 5 minutes or the next time we wake up.
-        nextTimeRefresh = millis() + (5 * 60) * 1000;
+      if (!gps_on) {
+        // Seem like the GPS sneaks on from time to time, when we have gps_on set to false. So lets make sure it stays off.
+        gps_keepoff(); // This will also call gps_aquire(); Which shuts it down.
       }
     }
 
@@ -508,5 +514,5 @@ void loop()
       OLED_ClearDisplayBuffer(); 
       Output("Wakeup");
     }
-  }
+  } // End Normal Operation
 }

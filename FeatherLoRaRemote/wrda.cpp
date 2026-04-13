@@ -625,10 +625,6 @@ void Do_WRDA_Samples() {
         }
 
         if ((i>30 && i<=40)) { // 10 1s samples
-        // if (c-- || (i>30 && i<=40)) { // 10 1s samples
-          //while (c--) {
-          //digitalWrite(PM25AQI_PIN, HIGH);
-          //delay(10000);
           mux_channel_set(MUX_AQ_CHANNEL);
           if (pmaq.read(&aqid)) {
             pm25aqi_obs.count++;
@@ -644,12 +640,7 @@ void Do_WRDA_Samples() {
           else {
             pm25aqi_obs.fail_count++;
           } 
-          mux_deselect_all();
-          //if (SerialConsoleEnabled) Serial.print(".");  // Provide Serial Console some feedback as we loop and wait til next observation 
-          //OLED_spin();
-          //digitalWrite(PM25AQI_PIN, LOW);
-          //delay(5000);
-          //}       
+          mux_deselect_all();     
         }
         if (i == 41) {
           Output("AQS:SLEEP");
@@ -673,7 +664,6 @@ void Do_WRDA_Samples() {
     if (SerialConsoleEnabled) Serial.println();  // Send a newline out to cleanup after all the periods we have been logging
     
     if (PM25AQI_exists) {
-     
       if (pm25aqi_obs.fail_count > pm25aqi_obs.count) {
         // Fail if half our sample reads failed. - I think this is reasonable - rjb
         Output("AQS:FAIL");

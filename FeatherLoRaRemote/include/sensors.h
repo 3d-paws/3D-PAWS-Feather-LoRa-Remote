@@ -198,7 +198,7 @@ extern bool BLX_exists;
  * We sample the sensor every second keeping highest 1 second returned values for the observation interval. 
  * ======================================================================================================================
  */
-#define PM25AQI_PIN 5  // D5
+#define PM25AQI_PIN 6  // D6
 #define PM25AQI_ADDRESS   0x12
 
 typedef struct{

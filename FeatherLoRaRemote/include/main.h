@@ -6,6 +6,7 @@
 #include <Arduino.h>
 
 #define MAX_MSGBUF_SIZE 256
+#define RTC_UPDATE_INTERVAL 4                // 4 Hours from boot
 
 // Extern variables
 extern char versioninfo[];

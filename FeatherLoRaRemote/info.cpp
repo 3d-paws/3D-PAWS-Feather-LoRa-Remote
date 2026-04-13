@@ -84,8 +84,8 @@ void INFO_Do()
   // Battery Voltage and System Status
   batt = vbat_get();
 
-  sprintf (rest, ",\"ver\":\"%s\",\"bv\":%d.%02d,\"hth\":%d,",
-    versioninfo, (int)batt, (int)(batt*100)%100, SystemStatusBits);
+  sprintf (rest, ",\"ver\":\"%s\",\"bv\":%.2f,\"hth\":%d,",
+    versioninfo, batt, SystemStatusBits);
 
   sprintf (rest+strlen(rest), "\"obsi\":\"%dm\",\"obsti\":\"%dm\",\"t2nt\":\"%ds\",",
     cf_obs_period, cf_obs_period, seconds_to_next_obs());

@@ -32,6 +32,7 @@
 #include "include/output.h"
 #include "include/lora.h"
 #include "include/support.h"
+#include "include/gps.h"
 #include "include/time.h"
 #include "include/main.h"
 #include "include/obs.h"
@@ -201,6 +202,13 @@ void OBS_Take() {
   obs.sensor[sidx].type = I_OBS;
   obs.sensor[sidx].f_obs = SystemStatusBits;
   obs.sensor[sidx++].inuse = true;
+
+  if (gps_exists) {
+    strcpy (obs.sensor[sidx].id, "gon");
+    obs.sensor[sidx].type = I_OBS;
+    obs.sensor[sidx].f_obs = (gps_on) ? 1 : 0;
+    obs.sensor[sidx++].inuse = true;
+  }
 
   // Rain Gauge 1 - Each tip is 0.2mm of rain
   if (cf_rg1_enable) {

@@ -13,6 +13,7 @@
 
 #define GPS_STANDBY_MODE 0
 #define GPS_BACKUP_MODE 1
+#define GPS_PERIODIC_MODE 2
 
 // Extern variables
 extern bool   gps_exists;
@@ -29,6 +30,7 @@ extern bool   gps_on;
 // Function prototypes
 void gps_displayInfo();
 bool gps_aquire();
+void gps_keepoff();
 void gps_initialize();
 
 

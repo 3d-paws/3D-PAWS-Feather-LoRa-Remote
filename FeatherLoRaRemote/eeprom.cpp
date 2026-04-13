@@ -291,20 +291,16 @@ void EEPROM_Dump() {
 
   Output("EEPROM DUMP");
 
-  sprintf (Buffer32Bytes, " RT1:%d.%02d", 
-    (int)eeprom.rgt1, (int)(eeprom.rgt1*100)%100); 
+  sprintf (Buffer32Bytes, " RT1:%.2f", eeprom.rgt1);
   Output (Buffer32Bytes);
 
-  sprintf (Buffer32Bytes, " RP1:%d.%02d", 
-  (int)eeprom.rgp1, (int)(eeprom.rgp1*100)%100); 
+  sprintf (Buffer32Bytes, " RP1:%.2f", eeprom.rgp1);
   Output (Buffer32Bytes);
 
-  sprintf (Buffer32Bytes, " RT2:%d.%02d", 
-    (int)eeprom.rgt2, (int)(eeprom.rgt2*100)%100); 
+  sprintf (Buffer32Bytes, " RT2:%.2f", eeprom.rgt2);
   Output (Buffer32Bytes);
 
-  sprintf (Buffer32Bytes, " RP2:%d.%02d", 
-  (int)eeprom.rgp2, (int)(eeprom.rgp2*100)%100); 
+  sprintf (Buffer32Bytes, " RP2:%.2f", eeprom.rgp2);
   Output (Buffer32Bytes);
 
   sprintf (Buffer32Bytes, " RGTS:%lu", eeprom.rgts);

@@ -858,11 +858,11 @@ void si1145_initialize() {
     si_last_ir = uv.readIR();
     si_last_uv = uv.readUV()/100.0;
 
-    sprintf (msgbuf, "SI:VI[%d.%02d]", (int)si_last_vis, (int)(si_last_vis*100.0)%100); 
+    sprintf (msgbuf, "SI:VI[%.2f]", si_last_vis); 
     Output (msgbuf);
-    sprintf (msgbuf, "SI:IR[%d.%02d]", (int)si_last_ir, (int)(si_last_ir*100.0)%100); 
+    sprintf (msgbuf, "SI:IR[%.2f]", si_last_ir); 
     Output (msgbuf);
-    sprintf (msgbuf, "SI:UV[%d.%02d]", (int)si_last_uv, (int)(si_last_uv*100.0)%100); 
+    sprintf (msgbuf, "SI:UV[%.2f]", si_last_uv); 
     Output (msgbuf);
   }
 }

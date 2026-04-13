@@ -134,17 +134,27 @@ float  gps_hdop=9999.9;
  * gps_wake() - 36 mA at 3.3 V during acquisition; in regular tracking it’s about 28 mA
  * 
  * Caveat: Once the PA1010D is in standby or backup, I2C failes to respond to command and wake pin. Reset needed.
+ * 
+ * Pulling the RST pin low performs a full hardware reset on the PA1010D, clearing firmware state, 
+ * PMTK settings (returns to full power 1Hz mode), and I2C buffer. The module restarts as if cold-booted.
  * =======================================================================================================================
  */
 void gps_wake()
 {
   if (gps_on == false) {
     digitalWrite(GPS_RST_PIN, LOW);   // assert reset
-    delay(50);                        // hold for 50ms
+    delay(20);                        // hold for 20ms
   
     digitalWrite(GPS_RST_PIN, HIGH);  // release reset
     Output ("GPS MODE:WAKE");
     delay(500);                       // let GPS boot fully
+
+    if (myI2CGPS.begin()) {    
+      Output("GPS:BEGIN OK");
+    }
+    else {
+      Output("GPS:BEGIN ERR");
+    }
     gps_on = true;
   }
 }
@@ -164,10 +174,26 @@ void gps_sleep(int mode)
       myI2CGPS.sendMTKpacket("$PMTK161,0*28\r\n");
       Output ("GPS MODE:STANDBY");
     }
-    else {
+    else if (mode == GPS_BACKUP_MODE) {
       // Put in backup mode - 18 µA
       myI2CGPS.sendMTKpacket("$PMTK225,4*2F\r\n");
       Output ("GPS MODE:BACKUP");
+    }
+    else {
+      // Put in periodic mode
+      /*
+       * PA1010D $PMTK225,2,4000,15000,24000,90000*16 Command Parameters
+       * -----------------------------------------------------------
+       * Parameter     | Value (ms) | Meaning
+       * --------------|------------|---------
+       * Type          | 2          | Periodic Standby Mode (stops acquisition during sleep)
+       * Run_time      | 4000       | 4s full navigation/tracking (~28mA)
+       * Sleep_time    | 15000      | 15s standby (~200µA)
+       * 2nd_Run_time  | 24000      | 24s extended nav (if no fix in first cycle)
+       * 2nd_Sleep_time| 90000      | 90s extended sleep
+       */
+      myI2CGPS.sendMTKpacket("$PMTK225,2,4000,15000,24000,90000*16\r\n");
+      Output ("GPS MODE:PERIODIC");
     }
     gps_on = false;
     
@@ -213,6 +239,29 @@ void gps_displayInfo()
   }
   else{
     Output("GPS:!VALID");
+  }
+}
+
+/* 
+ *=======================================================================================================================
+ * gps_keepoff() - Have seen the gps on when it should not be, check and shut off if i2c 0x10 responds
+ *                 When off it will not respond to the i2c request.
+ *=======================================================================================================================
+ */
+void gps_keepoff() {
+  if (gps_exists && !gps_on && I2C_Device_Exist(GPS_ADDRESS)) {
+    Output("GPS ON: Hardware reset");
+    
+    // Toggle reset pin 
+    digitalWrite(GPS_RST_PIN, LOW);  
+    delay(20);  
+    digitalWrite(GPS_RST_PIN, HIGH);
+    delay(500);
+    
+    if (myI2CGPS.begin()) {
+      // Let gps_aquire() handle full acquire + sleep
+      gps_aquire();  // This already validates + sleeps
+    }
   }
 }
 
