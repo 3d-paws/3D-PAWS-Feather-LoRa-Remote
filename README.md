@@ -9,8 +9,6 @@ This software is supported on a Adafruit Feather LoRa board. It provides full we
 ### Normal Main Loop operation
 Normally the unit is in low power sleep mode. If a rain tip occurs, we wake up increment the tip count in the interrupt handler. Wakeup from sleep occures on configation settings of (5,6,10,15,20,30 minute) hourly periods. Actually wakeup is 1 minute prior from one of these periods. If Wind, Distance or Air Quality is configured. This allows time for samples to be taken for those observations where it is required. After observations have been made, they are transmitted in one or more LoRa messages. Then time to next observation is determined and we go into low power mode for this duration.
 
-### CONFIG.TXT example
-
 #### Things to Note
 
 - The same sensors the Particle Full Station supports are supported by the Feather LoRaRemote. See [Particle Full Station Documentation](https://github.com/3d-paws/3D-PAWS-Particle-FullStation/blob/master/README.md) for sensors information.
