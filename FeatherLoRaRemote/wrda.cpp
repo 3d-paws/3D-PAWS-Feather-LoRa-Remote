@@ -622,6 +622,7 @@ void Do_WRDA_Samples() {
           mux_channel_set(MUX_AQ_CHANNEL);
           pmaq.read(&aqid); // Toss 1st reading after wakeup
           mux_deselect_all();
+          if (SerialConsoleEnabled) Serial.println(); // put a return after the printed dots
         }
 
         if ((i>30 && i<=40)) { // 10 1s samples
@@ -651,7 +652,7 @@ void Do_WRDA_Samples() {
           // (PMSA003I/PM25AQI) and can lead to bus lockup if the sensor does not fully release the 
           // SDA/SCL lines when "asleep".
               
-          // Move to another mux channel before we power dower the AQ sensor. To avoid the above.
+          // Disconnect mux channel before we power dower the AQ sensor. To avoid the above.
           mux_deselect_all();  
           digitalWrite(PM25AQI_PIN, LOW); // Put to Sleep Air Quality Sensor  
         }

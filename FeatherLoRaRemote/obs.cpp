@@ -203,13 +203,6 @@ void OBS_Take() {
   obs.sensor[sidx].f_obs = SystemStatusBits;
   obs.sensor[sidx++].inuse = true;
 
-  if (gps_exists) {
-    strcpy (obs.sensor[sidx].id, "gon");
-    obs.sensor[sidx].type = I_OBS;
-    obs.sensor[sidx].f_obs = (gps_on) ? 1 : 0;
-    obs.sensor[sidx++].inuse = true;
-  }
-
   // Rain Gauge 1 - Each tip is 0.2mm of rain
   if (cf_rg1_enable) {
     rg1 = raingauge1_sample();
