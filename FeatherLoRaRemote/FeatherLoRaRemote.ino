@@ -1,5 +1,5 @@
 #define COPYRIGHT "Copyright [2026] [University Corporation for Atmospheric Research]"
-#define VERSION_INFO "FLR-260412"
+#define VERSION_INFO "FLR-260416"
 /*
  *======================================================================================================================
  * FeatherLoRaRemote - 3D-PAWS-Feather-LoRaRemote
@@ -67,7 +67,7 @@
  *                          Changed GetDeviceID() to be a length of 16 instead of 24
  *           2026-04-12 RJB Code clean up on BMX processing in OBS and Station monitor, utilizing BMX_1_type from initializtion
  *                          Code clean up switch to %.2f on sprintf 
- * 
+ *           2026-04-16 RJB Corrections on handling sht1_humid and sht1_temp for derived observations
  * 
  * Time Format: 2022:09:19:19:10:00  YYYY:MM:DD:HR:MN:SS  Enter UTC time and not local time.
  * 

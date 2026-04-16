@@ -10,9 +10,7 @@
 #include <Adafruit_HTU21DF.h>
 #include <Adafruit_MCP9808.h>
 #include <Adafruit_SI1145.h>
-#include <Adafruit_SHT31.h>
 #include <Adafruit_PM25AQI.h>
-#include <Adafruit_HDC302x.h>
 #include <Adafruit_LPS35HW.h>
 #include <i2cArduino.h>
 #include <LeafSens.h>

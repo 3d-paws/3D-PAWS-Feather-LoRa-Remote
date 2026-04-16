@@ -27,9 +27,12 @@ Normally the unit is in low power sleep mode. If a rain tip occurs, we wake up i
 </div>
 
 - A I2C mux is supported for multiple Tinovi Soil Moisture sensors.
+- SDU Boot is supported after the first code install via USB port is performed. After which to install new code you can add file UPDATE.BIN on the SD card. UPDATE.BIN is removed as part up the update process.
+
+### Air Quality Sensor PM25AQI
 - Air Quality Sensor PM25AQI must be connected to mux port 7. And feather pin D6 must be connected to PM25AQI pin SET. This turns on and off the PM25AQI fan and laser. The mux is needed to isolate the PM25AQI's I2C channel. The PM25AQI hold the I2C buss when powered down. Interfering with other I2C devices.
 - Air Quality Sensor PM25AQI should be powered by the 5V VBUS pin. We have seen issues multiple i2c devices and the AQS.
-- SDU Boot is supported after the first code install via USB port is performed. After which to install new code you can add file UPDATE.BIN on the SD card. UPDATE.BIN is removed as part up the update process.
+- Adding a Air Quality Sensor PM25AQI has added instability with random lockup during sample taking.
 
 ### LoRa Antenna Length
 The recommended antenna wire lengths for Adafruit LoRa Feather boards are frequency-dependent quarter-wave whip antennas:

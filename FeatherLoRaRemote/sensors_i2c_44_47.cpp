@@ -355,7 +355,6 @@ void sensor_i2c_44_47_obs_do(int &sidx) {
         t = (isnan(t) || (t < QC_MIN_T)  || (t > QC_MAX_T))  ? QC_ERR_T  : t;
         obs.sensor[sidx].f_obs = t;
         obs.sensor[sidx++].inuse = true;
-        sht1_temp = t; // save for derived observations
     
         // SHT3 Humidity   
         sprintf (Buffer32Bytes, "sh%d", id);
@@ -367,7 +366,9 @@ void sensor_i2c_44_47_obs_do(int &sidx) {
         obs.sensor[sidx++].inuse = true;
 
         if (id == 1) {
-          sht1_humid = h; // save for derived observations
+          // save for derived observations
+          sht1_temp = t;
+          sht1_humid = h; 
         }
 
         break;
@@ -392,7 +393,6 @@ void sensor_i2c_44_47_obs_do(int &sidx) {
         obs.sensor[sidx].type = F_OBS;
         obs.sensor[sidx].f_obs = t;
         obs.sensor[sidx++].inuse = true;
-        sht1_temp = t; // save for derived observations
     
         // SHT4 Humidity   
         sprintf (Buffer32Bytes, "sh%d", id);
@@ -402,7 +402,9 @@ void sensor_i2c_44_47_obs_do(int &sidx) {
         obs.sensor[sidx++].inuse = true;
 
         if (id == 1) {
-          sht1_humid = h; // save for derived observations
+          // save for derived observations
+          sht1_temp = t;
+          sht1_humid = h;
         }
 
         break;
@@ -499,7 +501,7 @@ void sensor_initialize_i2c_44_47() {
     i2c_44_47_sensors[idx].i2c_address = addr;
 
     switch (i2c_44_47_sensors[idx].type) {
-      case SENSOR_SHT31 : {
+      case SENSOR_SHT31 : {  // Default 0x44 address, then 0x45
         s_count++;
         i2c_44_47_sensors[idx].id = s_count;
         Adafruit_SHT31 &sht3 = i2c_44_47_sensors[idx].sht3;  // Create a Alias 
@@ -510,10 +512,12 @@ void sensor_initialize_i2c_44_47() {
           sprintf (Buffer32Bytes, " Init SHT(%d) OK", s_count);
         }
         Output (Buffer32Bytes);
-        SHT_1_exists = true;
+        if (s_count==1) {
+          SHT_1_exists = true;
+        }
         break;
       }
-      case SENSOR_SHT45 : {
+      case SENSOR_SHT45 : { // Only 0x44 address
         s_count++;
         i2c_44_47_sensors[idx].id = s_count;
         Adafruit_SHT4x &sht4 = i2c_44_47_sensors[idx].sht4;  // Create a Alias 
@@ -533,7 +537,9 @@ void sensor_initialize_i2c_44_47() {
           // and reads will take longer too!
           sht4.setHeater(SHT4X_NO_HEATER);
           sht4_detail(sht4);
-          SHT_1_exists = true;
+          if (s_count==1) {
+            SHT_1_exists = true;
+          }
         }
         break;
       }
