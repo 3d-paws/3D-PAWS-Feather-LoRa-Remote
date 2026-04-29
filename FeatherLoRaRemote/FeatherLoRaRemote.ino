@@ -68,6 +68,7 @@
  *           2026-04-12 RJB Code clean up on BMX processing in OBS and Station monitor, utilizing BMX_1_type from initializtion
  *                          Code clean up switch to %.2f on sprintf 
  *           2026-04-16 RJB Corrections on handling sht1_humid and sht1_temp for derived observations
+ *           2026-04-29 RJB Correction in Wind_SampleSpeed() on delta_ms.
  * 
  * Time Format: 2022:09:19:19:10:00  YYYY:MM:DD:HR:MN:SS  Enter UTC time and not local time.
  * 
@@ -164,6 +165,36 @@
  *      Otherwise it enters ultra low power sleep for the calculated amount of time.
  * So rain observations have a granularity of 15 minutes
  * ======================================================================================================================
+ */
+
+/*
+ * Required Libraries:
+ *  adafruit-HTU21DF        https://github.com/adafruit/Adafruit_HTU21DF_Library - I2C ADDRESS 0x40
+ *  adafruit-BusIO          https://github.com/adafruit/Adafruit_BusIO 
+ *  Adafruit_MCP9808        https://github.com/adafruit/Adafruit_MCP9808_Library - I2C ADDRESS 0x18
+ *  Adafruit_BME280         https://github.com/adafruit/Adafruit_BME280_Library  - I2C ADDRESS 0x77  (SD0 to GND = 0x76)
+ *  Adafruit_BMP280         https://github.com/adafruit/Adafruit_BMP280_Library  - I2C ADDRESS 0x77  (SD0 to GND = 0x76)
+ *  Adafruit_BMP3XX         https://github.com/adafruit/Adafruit_BMP3XX          - I2C ADDRESS 0x77 and (SD0 to GND = 0x76)
+ *  Adafruit_BMP5xx         https://github.com/adafruit/Adafruit_BMP5xx          - I2C ADDRESS 0x47 and 0x47
+ *  Adafruit_GFX            https://github.com/adafruit/Adafruit-GFX-Library
+ *  Adafruit_Sensor         https://github.com/adafruit/Adafruit_Sensor
+ *  Adafruit_SHT31          https://github.com/adafruit/Adafruit_SHT31           - I2C ADDRESS 0x44 and 0x45 when ADR Pin High
+ *  Adafruit_SHT4x          https://github.com/adafruit/Adafruit_SHT4x           - I2C ADDRESS 0x44
+ *  Adafruit_VEML7700       https://github.com/adafruit/Adafruit_VEML7700        - I2C ADDRESS 0x10
+ *  Adafruit_SI1145         https://github.com/adafruit/Adafruit_SI1145_Library  - I2C ADDRESS 0x60
+ *  Adafruit_SSD1306        https://github.com/adafruit/Adafruit_SSD1306         - I2C ADDRESS 0x3C  
+ *  Adafruit_PM25AQI        https://github.com/adafruit/Adafruit_PM25AQI         - I2C ADDRESS 0x12 - Modified to Compile, Adafruit_PM25AQI.cpp" line 104
+ *  RTCLibrary              https://github.com/adafruit/RTClib
+ *  SdFat                   https://github.com/greiman/SdFat.git - 1.0.16 by Bill Greiman
+ *  RF9X-RK-SPI1            https://github.com/rickkas7/AdafruitDataLoggerRK - 0.2.0 - Modified RadioHead LoRa for SPI1
+ *  AES-master              https://github.com/spaniakos/AES - 0.0.1 - Modified to make it compile
+ *  CryptoLW-RK             https://github.com/rickkas7/CryptoLW-RK - 0.2.0
+ *  HIH8000                 No Library, Local functions hih8_initialize(), hih8_getTempHumid() - rjb
+ *  SENS0390                https://wiki.dfrobot.com/Ambient_Light_Sensor_0_200klx_SKU_SEN0390 - DFRobot_B_LUX_V30B - 1.0.1 I2C ADDRESS 0x94
+ *  EEPROM                  https://docs.particle.io/reference/device-os/api/eeprom/eeprom/ , https://www.adafruit.com/product/5146
+ *  SpatkFun_I2C_GPS        https://github.com/sparkfun/SparkFun_I2C_GPS_Arduino_Library I2C ADDRESS 0x10
+ *  LeafSens                https://github.com/tinovi/LeafArduinoI2c I2C ADDRESS 0x61
+ *  i2cArduino              https://github.com/tinovi/i2cArduino     I2C ADDRESS 0x63
  */
 
 /*

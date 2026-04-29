@@ -222,14 +222,16 @@ float Wind_SampleSpeed() {
   count = anemometer_interrupt_count;
   anemometer_interrupt_count = 0;
   time_ms = millis();
-  anemometer_interrupt_stime = time_ms;
   interrupts();
 
   // Unsigned subtraction naturally wraps on rollover, so if time_ms has rolled past zero and anemometer_interrupt_stime 
   // is still the old large value, the subtraction still produces the correct elapsed time.
   delta_ms = time_ms - anemometer_interrupt_stime;
+  anemometer_interrupt_stime = time_ms;
 
   if (count && delta_ms > 0) {
+    // wind_speed = (  ( (count/2) * (2 * 3.14156 * ws_radius) )  / (float)( (float)delta_ms / 1000)  ) * ws_calibration;
+
     wind_speed = ((count * 3.14156f * ws_radius) / ((float)delta_ms / 1000.0f)) * ws_calibration;
   } else {
     wind_speed = 0.0f;

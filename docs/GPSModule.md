@@ -3,7 +3,7 @@
 ## Obtaining Time
 A GPS module can be added but not necessary. If partnered with a Feather M0 LoRa board, The GPS will be used to set the RTC clock at power on Which means you do not need to enter a date and time on the the serial console to set the RTC.
 
-Every 8 hous from power on, the RTC clock is updated from GPS.
+Every 4 hours from power on, the RTC clock is updated from GPS.
 
 Information (INFO) messages will contain geolocation information from the GPS.
 

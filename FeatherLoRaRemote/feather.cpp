@@ -89,7 +89,7 @@ void GetDeviceID() {
 
   memset (DeviceID, 0, 17);
   for (int i = 0; i < 8; i++) {
-    sprintf (DeviceID+strlen(DeviceID), "%02x", compressedId[i]);
+    sprintf (DeviceID+strlen(DeviceID), "%02X", compressedId[i]);
   }
   DeviceID[16] = '\0'; // Ensure null-termination
 }
