@@ -184,10 +184,69 @@ I2C_44_47_SENSOR_TYPE i2c_scan_sensor_type(uint8_t addr) {
 
 /* 
  *=======================================================================================================================
+ * readSHT31SerialNumber() - display sht3x details
+ *=======================================================================================================================
+ */
+uint32_t readSHT31SerialNumber(uint8_t i2cAddr) {
+  uint8_t buffer[6];
+  const uint16_t READ_SERIAL_CMD = 0x3780;
+
+  // 1. Send the command
+  Wire.beginTransmission(i2cAddr);
+  Wire.write(highByte(READ_SERIAL_CMD));
+  Wire.write(lowByte(READ_SERIAL_CMD));
+  
+  // Return 0 if the transmission fails (sensor not present or bus busy)
+  if (Wire.endTransmission() != 0) {
+    return 0;
+  }
+
+  delay(1);
+
+  // 2. Request the 6-byte data packet
+  if (Wire.requestFrom(i2cAddr, (uint8_t)6) != 6) {
+    return 0; // Return 0 if we didn't receive exactly 6 bytes
+  }
+
+  for (int i = 0; i < 6; i++) {
+    buffer[i] = Wire.read();
+  }
+
+  // 3. Reconstruct and return the 32-bit serial number
+  return ((uint32_t)buffer[0] << 24) | 
+         ((uint32_t)buffer[1] << 16) | 
+         ((uint32_t)buffer[3] << 8)  | 
+         ((uint32_t)buffer[4]);
+}
+
+/* 
+ *=======================================================================================================================
+ * sht3_detail() - display sht3x details
+ *=======================================================================================================================
+ */
+void sht3_detail(int idx) {
+  Adafruit_SHT31 &sht3 = i2c_44_47_sensors[idx].sht3;
+
+  Output (" SHT3x Information");
+  sprintf (Buffer32Bytes, " Serial Number:%s", i2c_44_47_sensors[idx].sn);
+  Output(Buffer32Bytes);
+
+  if (sht3.isHeaterEnabled()) {
+    Output(" Heater:ON");
+  }
+  else {
+    Output(" Heater:OFF");
+  }
+}
+
+/* 
+ *=======================================================================================================================
  * sht4_detail() - display sht4x details
  *=======================================================================================================================
  */
-void sht4_detail(Adafruit_SHT4x &sht4) {
+void sht4_detail(int idx) {
+  Adafruit_SHT4x &sht4 = i2c_44_47_sensors[idx].sht4;  // Create a Alias
+
   Output (" SHT4x Information");
   sprintf (Buffer32Bytes, " Serial Number: %lX", sht4.readSerial());
   Output(Buffer32Bytes);
@@ -249,7 +308,14 @@ void sensor_i2c_44_47_info(char *rest, int size, const char *&comma) {
 
     if (name) {
       int used = strlen(rest);
-      int n = sprintf(Buffer32Bytes, "%s%s(%02x)", comma, name, i2c_44_47_sensors[idx].i2c_address);
+      int n;
+
+      if (i2c_44_47_sensors[idx].sn[0]) {
+        n = sprintf(Buffer32Bytes, "%s%s(%02x-%s)", comma, name, i2c_44_47_sensors[idx].i2c_address, i2c_44_47_sensors[idx].sn);
+      }
+      else {
+        n = sprintf(Buffer32Bytes, "%s%s(%02x)", comma, name, i2c_44_47_sensors[idx].i2c_address);
+      }
 
       // can we add with out over flowing?
       if ((used + n) < size) {
@@ -512,6 +578,8 @@ void sensor_initialize_i2c_44_47() {
           sprintf (Buffer32Bytes, " Init SHT(%d) OK", s_count);
         }
         Output (Buffer32Bytes);
+        snprintf (i2c_44_47_sensors[idx].sn, I2C_44_77_SN_LEN, "%lX", readSHT31SerialNumber(addr));
+        sht3_detail(idx);
         if (s_count==1) {
           SHT_1_exists = true;
         }
@@ -536,7 +604,8 @@ void sensor_initialize_i2c_44_47() {
           // higher heat and longer times uses more power
           // and reads will take longer too!
           sht4.setHeater(SHT4X_NO_HEATER);
-          sht4_detail(sht4);
+          snprintf (i2c_44_47_sensors[idx].sn, I2C_44_77_SN_LEN, "%lX", sht4.readSerial());
+          sht4_detail(idx);
           if (s_count==1) {
             SHT_1_exists = true;
           }

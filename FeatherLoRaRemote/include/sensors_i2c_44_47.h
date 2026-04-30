@@ -27,6 +27,7 @@
  */
 
 #define I2C_44_47_SENSOR_COUNT 4
+#define I2C_44_77_SN_LEN 10
 
 typedef enum {
     SENSOR_UNKNOWN,
@@ -40,6 +41,7 @@ typedef struct {
     I2C_44_47_SENSOR_TYPE type;
     uint8_t i2c_address;
     uint8_t id;
+    char sn[I2C_44_77_SN_LEN];
     Adafruit_SHT31 sht3;
     Adafruit_SHT4x sht4;
     Adafruit_BMP5xx bmp5;
